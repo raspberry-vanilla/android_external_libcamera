@@ -184,14 +184,14 @@ ExposureModeHelper::splitExposure(utils::Duration exposure) const
 
 		if (stageShutter * lastStageGain >= exposure) {
 			shutter = clampShutter(exposure / clampGain(lastStageGain));
-			gain = clampGain(exposure / shutter);
+			gain = clampGain(exposure.count() / shutter.count());
 
 			return { shutter, gain, exposure / (shutter * gain) };
 		}
 
 		if (stageShutter * stageGain >= exposure) {
 			shutter = clampShutter(exposure / clampGain(stageGain));
-			gain = clampGain(exposure / shutter);
+			gain = clampGain(exposure.count() / shutter.count());
 
 			return { shutter, gain, exposure / (shutter * gain) };
 		}
@@ -205,7 +205,7 @@ ExposureModeHelper::splitExposure(utils::Duration exposure) const
 	 * shutter time is maxed before gain is touched at all.
 	 */
 	shutter = clampShutter(exposure / clampGain(stageGain));
-	gain = clampGain(exposure / shutter);
+	gain = clampGain(exposure.count() / shutter.count());
 
 	return { shutter, gain, exposure / (shutter * gain) };
 }
