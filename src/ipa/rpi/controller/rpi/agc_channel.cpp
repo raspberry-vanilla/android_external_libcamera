@@ -507,7 +507,7 @@ void AgcChannel::prepare(Metadata *imageMetadata)
 			Duration actualExposure = deviceStatus.exposureTime *
 						  deviceStatus.analogueGain;
 			if (actualExposure) {
-				double digitalGain = totalExposureValue / actualExposure;
+				double digitalGain = totalExposureValue.count() / actualExposure.count();
 				LOG(RPiAgc, Debug) << "Want total exposure " << totalExposureValue;
 				/*
 				 * Never ask for a gain < 1.0, and also impose
@@ -963,7 +963,7 @@ void AgcChannel::divideUpExposure()
 			}
 			if (status_.fixedAnalogueGain == 0.0) {
 				if (exposureMode_->gain[stage] * exposureTime >= exposureValue) {
-					analogueGain = exposureValue / exposureTime;
+					analogueGain = exposureValue.count() / exposureTime.count();
 					break;
 				}
 				analogueGain = exposureMode_->gain[stage];
@@ -983,7 +983,7 @@ void AgcChannel::divideUpExposure()
 		int flickerPeriods = exposureTime / status_.flickerPeriod;
 		if (flickerPeriods) {
 			Duration newExposureTime = flickerPeriods * status_.flickerPeriod;
-			analogueGain *= exposureTime / newExposureTime;
+			analogueGain *= exposureTime.count() / newExposureTime.count();
 			/*
 			 * We should still not allow the ag to go over the
 			 * largest value in the exposure mode. Note that this

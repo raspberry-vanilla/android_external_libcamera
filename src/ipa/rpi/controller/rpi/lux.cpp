@@ -83,7 +83,7 @@ void Lux::process(StatisticsPtr &stats, Metadata *imageMetadata)
 		double currentY = stats->yHist.interQuantileMean(0, 1);
 		double gainRatio = referenceGain_ / currentGain;
 		double exposureTimeRatio =
-			referenceExposureTime_ / deviceStatus.exposureTime;
+			referenceExposureTime_.count() / deviceStatus.exposureTime.count();
 		double apertureRatio = referenceAperture_ / currentAperture;
 		double yRatio = currentY * (65536 / stats->yHist.bins()) / referenceY_;
 		double estimatedLux = exposureTimeRatio * gainRatio *
