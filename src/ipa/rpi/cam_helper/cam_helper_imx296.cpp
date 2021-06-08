@@ -57,7 +57,7 @@ double CamHelperImx296::gain(uint32_t gainCode) const
 uint32_t CamHelperImx296::exposureLines(const Duration exposure,
 					[[maybe_unused]] const Duration lineLength) const
 {
-	return std::max<uint32_t>(minExposureLines, (exposure - 14.26us) / timePerLine);
+	return std::max<uint32_t>(minExposureLines, (exposure - 14.26us).count() / timePerLine.count());
 }
 
 Duration CamHelperImx296::exposure(uint32_t exposureLines,
