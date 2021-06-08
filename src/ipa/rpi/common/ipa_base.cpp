@@ -559,10 +559,10 @@ void IpaBase::setMode(const IPACameraSensorInfo &sensorInfo)
 		} else {
 			LOG(IPARPI, Error)
 				<< "Sensor minimum line length of " << pixelTime * mode_.width
-				<< " (" << 1us / pixelTime << " MPix/s)"
+				<< " (" << 1us / pixelTime.count() << " MPix/s)"
 				<< " is below the minimum allowable ISP limit of "
 				<< adjustedLineLength
-				<< " (" << 1us / minPixelTime << " MPix/s) ";
+				<< " (" << 1us / minPixelTime.count() << " MPix/s) ";
 			LOG(IPARPI, Error)
 				<< "THIS WILL CAUSE IMAGE CORRUPTION!!! "
 				<< "Please update the camera sensor driver to allow more horizontal blanking control.";
