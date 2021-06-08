@@ -63,7 +63,7 @@ void CamHelper::process([[maybe_unused]] StatisticsPtr &stats,
 
 uint32_t CamHelper::exposureLines(const Duration exposure, const Duration lineLength) const
 {
-	return exposure / lineLength;
+	return exposure.count() / lineLength.count();
 }
 
 Duration CamHelper::exposure(uint32_t exposureLines, const Duration lineLength) const
@@ -85,8 +85,8 @@ std::pair<uint32_t, uint32_t> CamHelper::getBlanking(Duration &exposure,
 	 * frameLengthMax gets calculated on the smallest line length as we do
 	 * not want to extend that unless absolutely necessary.
 	 */
-	frameLengthMin = minFrameDuration / mode_.minLineLength;
-	frameLengthMax = maxFrameDuration / mode_.minLineLength;
+	frameLengthMin = minFrameDuration.count() / mode_.minLineLength.count();
+	frameLengthMax = maxFrameDuration.count() / mode_.minLineLength.count();
 
 	/*
 	 * Watch out for (exposureLines + frameIntegrationDiff_) overflowing a
