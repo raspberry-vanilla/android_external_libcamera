@@ -132,6 +132,9 @@ int CameraStream::configure()
 	mutex_ = std::make_unique<Mutex>();
 
 	camera3Stream_->max_buffers = configuration().bufferCount;
+	// Android requires at least one buffer
+	if (camera3Stream_->max_buffers == 0)
+		camera3Stream_->max_buffers = 1;
 
 	return 0;
 }
