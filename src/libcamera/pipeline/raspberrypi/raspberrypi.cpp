@@ -566,6 +566,7 @@ CameraConfiguration::Status RPiCameraConfiguration::validate()
 
 			rawCount++;
 		} else {
+			cfg.bufferCount = 1;
 			outSize[outCount] = std::make_pair(count, cfg.size);
 			/* Record the largest resolution for fixups later. */
 			if (maxSize < cfg.size) {
