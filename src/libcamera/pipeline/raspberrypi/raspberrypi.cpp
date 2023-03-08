@@ -110,7 +110,6 @@ V4L2DeviceFormat toV4L2DeviceFormat(const V4L2VideoDevice *dev,
 
 	deviceFormat.fourcc = dev->toV4L2PixelFormat(pix);
 	deviceFormat.size = format.size;
-	deviceFormat.colorSpace = format.colorSpace;
 	return deviceFormat;
 }
 
@@ -137,7 +136,6 @@ V4L2SubdeviceFormat findBestFormat(const SensorFormats &formatsMap, const Size &
 {
 	double bestScore = std::numeric_limits<double>::max(), score;
 	V4L2SubdeviceFormat bestFormat;
-	bestFormat.colorSpace = ColorSpace::Raw;
 
 	constexpr float penaltyAr = 1500.0;
 	constexpr float penaltyBitDepth = 500.0;
@@ -343,7 +341,6 @@ class RPiCameraConfiguration : public CameraConfiguration
 public:
 	RPiCameraConfiguration(const RPiCameraData *data);
 
-	CameraConfiguration::Status validateColorSpaces(ColorSpaceFlags flags);
 	Status validate() override;
 
 	/* Cache the combinedTransform_ that will be applied to the sensor */
@@ -351,14 +348,6 @@ public:
 
 private:
 	const RPiCameraData *data_;
-
-	/*
-	 * Store the colour spaces that all our streams will have. RGB format streams
-	 * will have the same colorspace as YUV streams, with YCbCr field cleared and
-	 * range set to full.
-         */
-	std::optional<ColorSpace> yuvColorSpace_;
-	std::optional<ColorSpace> rgbColorSpace_;
 };
 
 class PipelineHandlerRPi : public PipelineHandler
@@ -399,112 +388,12 @@ RPiCameraConfiguration::RPiCameraConfiguration(const RPiCameraData *data)
 {
 }
 
-static const std::vector<ColorSpace> validColorSpaces = {
-	ColorSpace::Sycc,
-	ColorSpace::Smpte170m,
-	ColorSpace::Rec709
-};
-
-static std::optional<ColorSpace> findValidColorSpace(const ColorSpace &colourSpace)
-{
-	for (auto cs : validColorSpaces) {
-		if (colourSpace.primaries == cs.primaries &&
-		    colourSpace.transferFunction == cs.transferFunction)
-			return cs;
-	}
-
-	return std::nullopt;
-}
-
-static bool isRgb(const PixelFormat &pixFmt)
-{
-	const PixelFormatInfo &info = PixelFormatInfo::info(pixFmt);
-	return info.colourEncoding == PixelFormatInfo::ColourEncodingRGB;
-}
-
-static bool isYuv(const PixelFormat &pixFmt)
-{
-	/* The code below would return true for raw mono streams, so weed those out first. */
-	if (isRaw(pixFmt))
-		return false;
-
-	const PixelFormatInfo &info = PixelFormatInfo::info(pixFmt);
-	return info.colourEncoding == PixelFormatInfo::ColourEncodingYUV;
-}
-
-/*
- * Raspberry Pi drivers expect the following colour spaces:
- * - V4L2_COLORSPACE_RAW for raw streams.
- * - One of V4L2_COLORSPACE_JPEG, V4L2_COLORSPACE_SMPTE170M, V4L2_COLORSPACE_REC709 for
- *   non-raw streams. Other fields such as transfer function, YCbCr encoding and
- *   quantisation are not used.
- *
- * The libcamera colour spaces that we wish to use corresponding to these are therefore:
- * - ColorSpace::Raw for V4L2_COLORSPACE_RAW
- * - ColorSpace::Sycc for V4L2_COLORSPACE_JPEG
- * - ColorSpace::Smpte170m for V4L2_COLORSPACE_SMPTE170M
- * - ColorSpace::Rec709 for V4L2_COLORSPACE_REC709
- */
-
-CameraConfiguration::Status RPiCameraConfiguration::validateColorSpaces([[maybe_unused]] ColorSpaceFlags flags)
-{
-	Status status = Valid;
-	yuvColorSpace_.reset();
-
-	for (auto cfg : config_) {
-		/* First fix up raw streams to have the "raw" colour space. */
-		if (isRaw(cfg.pixelFormat)) {
-			/* If there was no value here, that doesn't count as "adjusted". */
-			if (cfg.colorSpace && cfg.colorSpace != ColorSpace::Raw)
-				status = Adjusted;
-			cfg.colorSpace = ColorSpace::Raw;
-			continue;
-		}
-
-		/* Next we need to find our shared colour space. The first valid one will do. */
-		if (cfg.colorSpace && !yuvColorSpace_)
-			yuvColorSpace_ = findValidColorSpace(cfg.colorSpace.value());
-	}
-
-	/* If no colour space was given anywhere, choose sYCC. */
-	if (!yuvColorSpace_)
-		yuvColorSpace_ = ColorSpace::Sycc;
-
-	/* Note the version of this that any RGB streams will have to use. */
-	rgbColorSpace_ = yuvColorSpace_;
-	rgbColorSpace_->ycbcrEncoding = ColorSpace::YcbcrEncoding::None;
-	rgbColorSpace_->range = ColorSpace::Range::Full;
-
-	/* Go through the streams again and force everyone to the same colour space. */
-	for (auto cfg : config_) {
-		if (cfg.colorSpace == ColorSpace::Raw)
-			continue;
-
-		if (isYuv(cfg.pixelFormat) && cfg.colorSpace != yuvColorSpace_) {
-			/* Again, no value means "not adjusted". */
-			if (cfg.colorSpace)
-				status = Adjusted;
-			cfg.colorSpace = yuvColorSpace_;
-		}
-		if (isRgb(cfg.pixelFormat) && cfg.colorSpace != rgbColorSpace_) {
-			/* Be nice, and let the YUV version count as non-adjusted too. */
-			if (cfg.colorSpace && cfg.colorSpace != yuvColorSpace_)
-				status = Adjusted;
-			cfg.colorSpace = rgbColorSpace_;
-		}
-	}
-
-	return status;
-}
-
 CameraConfiguration::Status RPiCameraConfiguration::validate()
 {
 	Status status = Valid;
 
 	if (config_.empty())
 		return Invalid;
-
-	status = validateColorSpaces(ColorSpaceFlag::StreamsShareColorSpace);
 
 	/*
 	 * Validate the requested transform against the sensor capabilities and
@@ -629,30 +518,10 @@ CameraConfiguration::Status RPiCameraConfiguration::validate()
 		V4L2DeviceFormat format;
 		format.fourcc = dev->toV4L2PixelFormat(cfg.pixelFormat);
 		format.size = cfg.size;
-		/* We want to send the associated YCbCr info through to the driver. */
-		format.colorSpace = yuvColorSpace_;
-
-		LOG(RPI, Debug)
-			<< "Try color space " << ColorSpace::toString(cfg.colorSpace);
 
 		int ret = dev->tryFormat(&format);
 		if (ret)
 			return Invalid;
-
-		/*
-		 * But for RGB streams, the YCbCr info gets overwritten on the way back
-		 * so we must check against what the stream cfg says, not what we actually
-		 * requested (which carefully included the YCbCr info)!
-		 */
-		if (cfg.colorSpace != format.colorSpace) {
-			status = Adjusted;
-			LOG(RPI, Debug)
-				<< "Color space changed from "
-				<< ColorSpace::toString(cfg.colorSpace) << " to "
-				<< ColorSpace::toString(format.colorSpace);
-		}
-
-		cfg.colorSpace = format.colorSpace;
 
 		cfg.stride = format.planes[0].bpl;
 		cfg.frameSize = format.planes[0].size;
@@ -678,7 +547,6 @@ PipelineHandlerRPi::generateConfiguration(Camera *camera, const StreamRoles &rol
 	PixelFormat pixelFormat;
 	V4L2VideoDevice::Formats fmts;
 	Size size;
-	std::optional<ColorSpace> colorSpace;
 
 	if (roles.empty())
 		return config;
@@ -694,7 +562,6 @@ PipelineHandlerRPi::generateConfiguration(Camera *camera, const StreamRoles &rol
 			pixelFormat = mbusCodeToPixelFormat(sensorFormat.mbus_code,
 							    BayerFormat::Packing::CSI2);
 			ASSERT(pixelFormat.isValid());
-			colorSpace = ColorSpace::Raw;
 			bufferCount = 2;
 			rawCount++;
 			break;
@@ -702,12 +569,6 @@ PipelineHandlerRPi::generateConfiguration(Camera *camera, const StreamRoles &rol
 		case StreamRole::StillCapture:
 			fmts = data->isp_[Isp::Output0].dev()->formats();
 			pixelFormat = formats::NV12;
-			/*
-			 * Still image codecs usually expect the sYCC color space.
-			 * Even RGB codecs will be fine as the RGB we get with the
-			 * sYCC color space is the same as sRGB.
-			 */
-			colorSpace = ColorSpace::Sycc;
 			/* Return the largest sensor resolution. */
 			size = sensorSize;
 			bufferCount = 1;
@@ -725,11 +586,6 @@ PipelineHandlerRPi::generateConfiguration(Camera *camera, const StreamRoles &rol
 			 */
 			fmts = data->isp_[Isp::Output0].dev()->formats();
 			pixelFormat = formats::YUV420;
-			/*
-			 * Choose a color space appropriate for video recording.
-			 * Rec.709 will be a good default for HD resolutions.
-			 */
-			colorSpace = ColorSpace::Rec709;
 			size = { 1920, 1080 };
 			bufferCount = 4;
 			outCount++;
@@ -738,7 +594,6 @@ PipelineHandlerRPi::generateConfiguration(Camera *camera, const StreamRoles &rol
 		case StreamRole::Viewfinder:
 			fmts = data->isp_[Isp::Output0].dev()->formats();
 			pixelFormat = formats::ARGB8888;
-			colorSpace = ColorSpace::Sycc;
 			size = { 800, 600 };
 			bufferCount = 4;
 			outCount++;
@@ -786,7 +641,6 @@ PipelineHandlerRPi::generateConfiguration(Camera *camera, const StreamRoles &rol
 		StreamConfiguration cfg(formats);
 		cfg.size = size;
 		cfg.pixelFormat = pixelFormat;
-		cfg.colorSpace = colorSpace;
 		cfg.bufferCount = bufferCount;
 		config->addConfiguration(cfg);
 	}
@@ -885,7 +739,6 @@ int PipelineHandlerRPi::configure(Camera *camera, CameraConfiguration *config)
 		V4L2PixelFormat fourcc = stream->dev()->toV4L2PixelFormat(cfg.pixelFormat);
 		format.size = cfg.size;
 		format.fourcc = fourcc;
-		format.colorSpace = cfg.colorSpace;
 
 		LOG(RPI, Debug) << "Setting " << stream->name() << " to "
 				<< format;
@@ -900,10 +753,6 @@ int PipelineHandlerRPi::configure(Camera *camera, CameraConfiguration *config)
 				<< ", returned " << format;
 			return -EINVAL;
 		}
-
-		LOG(RPI, Debug)
-			<< "Stream " << stream->name() << " has color space "
-			<< ColorSpace::toString(cfg.colorSpace);
 
 		cfg.setStream(stream);
 		stream->setExternal(true);
@@ -931,8 +780,6 @@ int PipelineHandlerRPi::configure(Camera *camera, CameraConfiguration *config)
 		format = {};
 		format.size = maxSize;
 		format.fourcc = dev->toV4L2PixelFormat(formats::YUV420);
-		/* No one asked for output, so the color space doesn't matter. */
-		format.colorSpace = ColorSpace::Sycc;
 		ret = dev->setFormat(&format);
 		if (ret) {
 			LOG(RPI, Error)
@@ -964,7 +811,6 @@ int PipelineHandlerRPi::configure(Camera *camera, CameraConfiguration *config)
 		const Size limit = maxDimensions.boundedToAspectRatio(format.size);
 
 		output1Format.size = (format.size / 2).boundedTo(limit).alignedDownTo(2, 2);
-		output1Format.colorSpace = format.colorSpace;
 		output1Format.fourcc = dev->toV4L2PixelFormat(formats::YUV420);
 
 		LOG(RPI, Debug) << "Setting ISP Output1 (internal) to "
