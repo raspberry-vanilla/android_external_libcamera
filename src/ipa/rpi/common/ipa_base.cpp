@@ -241,9 +241,11 @@ int32_t IpaBase::configure(const IPACameraSensorInfo &sensorInfo, const ConfigPa
 	 * based on the current sensor mode.
 	 */
 	ControlInfoMap::Map ctrlMap = ipaControls;
+	/*
 	ctrlMap[&controls::FrameDurationLimits] =
 		ControlInfo(static_cast<int64_t>(mode_.minFrameDuration.get<std::micro>()),
 			    static_cast<int64_t>(mode_.maxFrameDuration.get<std::micro>()));
+	*/
 
 	ctrlMap[&controls::AnalogueGain] =
 		ControlInfo(static_cast<float>(mode_.minAnalogueGain),
