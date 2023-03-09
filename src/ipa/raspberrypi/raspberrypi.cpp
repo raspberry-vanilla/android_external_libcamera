@@ -503,9 +503,11 @@ int IPARPi::configure(const IPACameraSensorInfo &sensorInfo, const IPAConfig &ip
 	ControlInfoMap::Map ctrlMap = ipaControls;
 	const Duration minSensorFrameDuration = mode_.minFrameLength * mode_.minLineLength;
 	const Duration maxSensorFrameDuration = mode_.maxFrameLength * mode_.maxLineLength;
+	/*
 	ctrlMap[&controls::FrameDurationLimits] =
 		ControlInfo(static_cast<int64_t>(minSensorFrameDuration.get<std::micro>()),
 			    static_cast<int64_t>(maxSensorFrameDuration.get<std::micro>()));
+	*/
 
 	ctrlMap[&controls::AnalogueGain] =
 		ControlInfo(1.0f, static_cast<float>(helper_->gain(maxSensorGainCode_)));
