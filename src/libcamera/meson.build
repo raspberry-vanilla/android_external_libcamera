@@ -216,6 +216,10 @@ libcamera_shader_headers = custom_target(
 
 libcamera_internal_headers += libcamera_shader_headers
 
+if host_machine.system() == 'android'
+    libcamera_soversion = ''
+endif
+
 # We add '/' to the build_rpath as a 'safe' path to act as a boolean flag.
 # The build_rpath is stripped at install time by meson, so we determine at
 # runtime if the library is running from an installed location by checking
