@@ -235,7 +235,7 @@ $(MESON_GEN_FILES_TARGET): $(sort $(shell find -L $(LIBCAMERA_TOP) -not -path '*
 		"pkgconfig = ['env', 'PKG_CONFIG_LIBDIR=' + '$(AOSP_ABSOLUTE_PATH)/$(MESON_GEN_DIR)', '/usr/bin/pkg-config']\n\n" \
 		"llvm-config = '/dev/null'\n"                                                                                     \
 		"[host_machine]\n"                                                                                                \
-		"system = 'linux'\n"                                                                                              \
+		"system = 'android'\n"                                                                                            \
 		"cpu_family = '$(MESON_CPU_FAMILY)'\n"                                                                            \
 		"cpu = '$(MESON_CPU_FAMILY)'\n"                                                                                   \
 		"endian = 'little'" > $(dir $@)/aosp_cross
