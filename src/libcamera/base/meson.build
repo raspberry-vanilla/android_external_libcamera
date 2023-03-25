@@ -44,6 +44,10 @@ libcamera_base_deps = [
     libunwind,
 ]
 
+if host_machine.system() == 'android'
+    libcamera_soversion = ''
+endif
+
 # Internal components must use the libcamera_base_private dependency to enable
 # the use of headers which must not be exposed to the libcamera public api.
 libcamera_base_args = [ '-DLIBCAMERA_BASE_PRIVATE' ]
