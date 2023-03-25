@@ -17,15 +17,15 @@ MY_PATH := $(call my-dir)
 
 AOSP_ABSOLUTE_PATH := $(realpath .)
 
-libcam_m_dummy_$(LOCAL_MULTILIB) := $(TARGET_OUT_INTERMEDIATES)/LIBCAM_DUMMY_$(LOCAL_MULTILIB)/dummy.c
+libcamera_m_dummy_$(LOCAL_MULTILIB) := $(TARGET_OUT_INTERMEDIATES)/LIBCAMERA_DUMMY_$(LOCAL_MULTILIB)/dummy.c
 
-$(libcam_m_dummy_$(LOCAL_MULTILIB)):
+$(libcamera_m_dummy_$(LOCAL_MULTILIB)):
 	mkdir -p $(dir $@)
 	touch $@
 
-LOCAL_SRC_FILES := $(call relative_top_path,$(MY_PATH))$(libcam_m_dummy_$(LOCAL_MULTILIB))
+LOCAL_SRC_FILES := $(call relative_top_path,$(MY_PATH))$(libcamera_m_dummy_$(LOCAL_MULTILIB))
 LOCAL_VENDOR_MODULE := true
-LOCAL_MODULE := libcam.dummy.$(LOCAL_MULTILIB)
+LOCAL_MODULE := libcamera.dummy.$(LOCAL_MULTILIB)
 
 # Prepare intermediate variables by AOSP make/core internals
 include $(BUILD_SHARED_LIBRARY)
