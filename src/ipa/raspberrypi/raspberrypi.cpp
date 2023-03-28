@@ -224,9 +224,6 @@ private:
 	Duration minFrameDuration_;
 	Duration maxFrameDuration_;
 
-	/* Maximum gain code for the sensor. */
-	uint32_t maxSensorGainCode_;
-
 	/* Track the frame length times over FrameLengthsQueueSize frames. */
 	std::deque<Duration> frameLengths_;
 	Duration lastTimeout_;
@@ -407,11 +404,27 @@ void IPARPi::setMode(const IPACameraSensorInfo &sensorInfo)
 	mode_.minFrameLength = sensorInfo.minFrameLength;
 	mode_.maxFrameLength = sensorInfo.maxFrameLength;
 
+	/* Store these for convenience. */
+	mode_.minFrameDuration = mode_.minFrameLength * mode_.minLineLength;
+	mode_.maxFrameDuration = mode_.maxFrameLength * mode_.maxLineLength;
+
 	/*
 	 * Some sensors may have different sensitivities in different modes;
 	 * the CamHelper will know the correct value.
 	 */
 	mode_.sensitivity = helper_->getModeSensitivity(mode_);
+
+	const ControlInfo &gainCtrl = sensorCtrls_.at(V4L2_CID_ANALOGUE_GAIN);
+	const ControlInfo &shutterCtrl = sensorCtrls_.at(V4L2_CID_EXPOSURE);
+
+	mode_.minAnalogueGain = helper_->gain(gainCtrl.min().get<int32_t>());
+	mode_.maxAnalogueGain = helper_->gain(gainCtrl.max().get<int32_t>());
+
+	/* Shutter speed is calculated based on the limits of the frame durations. */
+	mode_.minShutter = helper_->exposure(shutterCtrl.min().get<int32_t>(), mode_.minLineLength);
+	mode_.maxShutter = Duration::max();
+	helper_->getBlanking(mode_.maxShutter,
+			     mode_.minFrameDuration, mode_.maxFrameDuration);
 }
 
 int IPARPi::configure(const IPACameraSensorInfo &sensorInfo, const IPAConfig &ipaConfig,
@@ -438,8 +451,6 @@ int IPARPi::configure(const IPACameraSensorInfo &sensorInfo, const IPAConfig &ip
 			lensPresent_ = false;
 		}
 	}
-
-	maxSensorGainCode_ = sensorCtrls_.at(V4L2_CID_ANALOGUE_GAIN).max().get<int32_t>();
 
 	/* Setup a metadata ControlList to output metadata. */
 	libcameraMetadata_ = ControlList(controls::controls);
@@ -501,28 +512,19 @@ int IPARPi::configure(const IPACameraSensorInfo &sensorInfo, const IPAConfig &ip
 	 * based on the current sensor mode.
 	 */
 	ControlInfoMap::Map ctrlMap = ipaControls;
-	const Duration minSensorFrameDuration = mode_.minFrameLength * mode_.minLineLength;
-	const Duration maxSensorFrameDuration = mode_.maxFrameLength * mode_.maxLineLength;
 	/*
 	ctrlMap[&controls::FrameDurationLimits] =
-		ControlInfo(static_cast<int64_t>(minSensorFrameDuration.get<std::micro>()),
-			    static_cast<int64_t>(maxSensorFrameDuration.get<std::micro>()));
+		ControlInfo(static_cast<int64_t>(mode_.minFrameDuration.get<std::micro>()),
+			    static_cast<int64_t>(mode_.maxFrameDuration.get<std::micro>()));
 	*/
 
 	ctrlMap[&controls::AnalogueGain] =
-		ControlInfo(1.0f, static_cast<float>(helper_->gain(maxSensorGainCode_)));
-
-	/*
-	 * Calculate the max exposure limit from the frame duration limit as V4L2
-	 * will limit the maximum control value based on the current VBLANK value.
-	 */
-	Duration maxShutter = Duration::max();
-	helper_->getBlanking(maxShutter, minSensorFrameDuration, maxSensorFrameDuration);
-	const uint32_t exposureMin = sensorCtrls_.at(V4L2_CID_EXPOSURE).min().get<int32_t>();
+		ControlInfo(static_cast<float>(mode_.minAnalogueGain),
+			    static_cast<float>(mode_.maxAnalogueGain));
 
 	ctrlMap[&controls::ExposureTime] =
-		ControlInfo(static_cast<int32_t>(helper_->exposure(exposureMin, mode_.minLineLength).get<std::micro>()),
-			    static_cast<int32_t>(maxShutter.get<std::micro>()));
+		ControlInfo(static_cast<int32_t>(mode_.minShutter.get<std::micro>()),
+			    static_cast<int32_t>(mode_.maxShutter.get<std::micro>()));
 
 	/* Declare Autofocus controls, only if we have a controllable lens */
 	if (lensPresent_)
@@ -1482,19 +1484,16 @@ void IPARPi::applyAWB(const struct AwbStatus *awbStatus, ControlList &ctrls)
 
 void IPARPi::applyFrameDurations(Duration minFrameDuration, Duration maxFrameDuration)
 {
-	const Duration minSensorFrameDuration = mode_.minFrameLength * mode_.minLineLength;
-	const Duration maxSensorFrameDuration = mode_.maxFrameLength * mode_.maxLineLength;
-
 	/*
 	 * This will only be applied once AGC recalculations occur.
 	 * The values may be clamped based on the sensor mode capabilities as well.
 	 */
-	minFrameDuration_ = minFrameDuration ? minFrameDuration : defaultMaxFrameDuration;
-	maxFrameDuration_ = maxFrameDuration ? maxFrameDuration : defaultMinFrameDuration;
+	minFrameDuration_ = minFrameDuration ? minFrameDuration : defaultMinFrameDuration;
+	maxFrameDuration_ = maxFrameDuration ? maxFrameDuration : defaultMaxFrameDuration;
 	minFrameDuration_ = std::clamp(minFrameDuration_,
-				       minSensorFrameDuration, maxSensorFrameDuration);
+				       mode_.minFrameDuration, mode_.maxFrameDuration);
 	maxFrameDuration_ = std::clamp(maxFrameDuration_,
-				       minSensorFrameDuration, maxSensorFrameDuration);
+				       mode_.minFrameDuration, mode_.maxFrameDuration);
 	maxFrameDuration_ = std::max(maxFrameDuration_, minFrameDuration_);
 
 	/* Return the validated limits via metadata. */
@@ -1517,6 +1516,8 @@ void IPARPi::applyFrameDurations(Duration minFrameDuration, Duration maxFrameDur
 
 void IPARPi::applyAGC(const struct AgcStatus *agcStatus, ControlList &ctrls)
 {
+	const int32_t minGainCode = helper_->gainCode(mode_.minAnalogueGain);
+	const int32_t maxGainCode = helper_->gainCode(mode_.maxAnalogueGain);
 	int32_t gainCode = helper_->gainCode(agcStatus->analogueGain);
 
 	/*
@@ -1524,7 +1525,7 @@ void IPARPi::applyAGC(const struct AgcStatus *agcStatus, ControlList &ctrls)
 	 * DelayedControls. The AGC will correctly handle a lower gain returned
 	 * by the sensor, provided it knows the actual gain used.
 	 */
-	gainCode = std::min<int32_t>(gainCode, maxSensorGainCode_);
+	gainCode = std::clamp<int32_t>(gainCode, minGainCode, maxGainCode);
 
 	/* getBlanking might clip exposure time to the fps limits. */
 	Duration exposure = agcStatus->shutterTime;
