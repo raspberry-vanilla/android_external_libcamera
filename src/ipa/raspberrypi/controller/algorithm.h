@@ -41,6 +41,14 @@ public:
 	{
 		return controller_->getGlobalMetadata();
 	}
+	const std::string &getTarget() const
+	{
+		return controller_->getTarget();
+	}
+	const Controller::HardwareConfig &getHardwareConfig() const
+	{
+		return controller_->getHardwareConfig();
+	}
 
 private:
 	Controller *controller_;

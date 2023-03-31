@@ -5,6 +5,7 @@
  * alsc.cpp - ALSC (auto lens shading correction) control algorithm
  */
 
+#include <algorithm>
 #include <functional>
 #include <math.h>
 #include <numeric>
@@ -24,9 +25,6 @@ LOG_DEFINE_CATEGORY(RPiAlsc)
 
 #define NAME "rpi.alsc"
 
-static const int X = AlscCellsX;
-static const int Y = AlscCellsY;
-static const int XY = X * Y;
 static const double InsufficientData = -1.0;
 
 Alsc::Alsc(Controller *controller)
@@ -51,8 +49,10 @@ char const *Alsc::name() const
 	return NAME;
 }
 
-static int generateLut(double *lut, const libcamera::YamlObject &params)
+static int generateLut(Array2D<double> &lut, const libcamera::YamlObject &params)
 {
+	/* These must be signed ints for the co-ordinate calculations below. */
+	int X = lut.dimensions().width, Y = lut.dimensions().height;
 	double cstrength = params["corner_strength"].get<double>(2.0);
 	if (cstrength <= 1.0) {
 		LOG(RPiAlsc, Error) << "corner_strength must be > 1.0";
@@ -81,9 +81,9 @@ static int generateLut(double *lut, const libcamera::YamlObject &params)
 	return 0;
 }
 
-static int readLut(double *lut, const libcamera::YamlObject &params)
+static int readLut(Array2D<double> &lut, const libcamera::YamlObject &params)
 {
-	if (params.size() != XY) {
+	if (params.size() != lut.size()) {
 		LOG(RPiAlsc, Error) << "Invalid number of entries in LSC table";
 		return -EINVAL;
 	}
@@ -101,7 +101,7 @@ static int readLut(double *lut, const libcamera::YamlObject &params)
 
 static int readCalibrations(std::vector<AlscCalibration> &calibrations,
 			    const libcamera::YamlObject &params,
-			    std::string const &name)
+			    std::string const &name, const Size &size)
 {
 	if (params.contains(name)) {
 		double lastCt = 0;
@@ -119,7 +119,7 @@ static int readCalibrations(std::vector<AlscCalibration> &calibrations,
 			calibration.ct = lastCt = ct;
 
 			const libcamera::YamlObject &table = p["table"];
-			if (table.size() != XY) {
+			if (table.size() != size.width * size.height) {
 				LOG(RPiAlsc, Error)
 					<< "Incorrect number of values for ct "
 					<< ct << " in " << name;
@@ -127,6 +127,7 @@ static int readCalibrations(std::vector<AlscCalibration> &calibrations,
 			}
 
 			int num = 0;
+			calibration.table.resize(size);
 			for (const auto &elem : table.asList()) {
 				value = elem.get<double>();
 				if (!value)
@@ -134,7 +135,7 @@ static int readCalibrations(std::vector<AlscCalibration> &calibrations,
 				calibration.table[num++] = *value;
 			}
 
-			calibrations.push_back(calibration);
+			calibrations.push_back(std::move(calibration));
 			LOG(RPiAlsc, Debug)
 				<< "Read " << name << " calibration for ct " << ct;
 		}
@@ -144,6 +145,7 @@ static int readCalibrations(std::vector<AlscCalibration> &calibrations,
 
 int Alsc::read(const libcamera::YamlObject &params)
 {
+	config_.tableSize = getHardwareConfig().awbRegions;
 	config_.framePeriod = params["frame_period"].get<uint16_t>(12);
 	config_.startupFrames = params["startup_frames"].get<uint16_t>(10);
 	config_.speed = params["speed"].get<double>(0.05);
@@ -153,12 +155,11 @@ int Alsc::read(const libcamera::YamlObject &params)
 	config_.minCount = params["min_count"].get<double>(10.0);
 	config_.minG = params["min_G"].get<uint16_t>(50);
 	config_.omega = params["omega"].get<double>(1.3);
-	config_.nIter = params["n_iter"].get<uint32_t>(X + Y);
+	config_.nIter = params["n_iter"].get<uint32_t>(config_.tableSize.width + config_.tableSize.height);
 	config_.luminanceStrength =
 		params["luminance_strength"].get<double>(1.0);
-	for (int i = 0; i < XY; i++)
-		config_.luminanceLut[i] = 1.0;
 
+	config_.luminanceLut.resize(config_.tableSize, 1.0);
 	int ret = 0;
 
 	if (params.contains("corner_strength"))
@@ -171,10 +172,12 @@ int Alsc::read(const libcamera::YamlObject &params)
 	if (ret)
 		return ret;
 
-	ret = readCalibrations(config_.calibrationsCr, params, "calibrations_Cr");
+	ret = readCalibrations(config_.calibrationsCr, params, "calibrations_Cr",
+			       config_.tableSize);
 	if (ret)
 		return ret;
-	ret = readCalibrations(config_.calibrationsCb, params, "calibrations_Cb");
+	ret = readCalibrations(config_.calibrationsCb, params, "calibrations_Cb",
+			       config_.tableSize);
 	if (ret)
 		return ret;
 
@@ -187,13 +190,16 @@ int Alsc::read(const libcamera::YamlObject &params)
 
 static double getCt(Metadata *metadata, double defaultCt);
 static void getCalTable(double ct, std::vector<AlscCalibration> const &calibrations,
-			double calTable[XY]);
-static void resampleCalTable(double const calTableIn[XY], CameraMode const &cameraMode,
-			     double calTableOut[XY]);
-static void compensateLambdasForCal(double const calTable[XY], double const oldLambdas[XY],
-				    double newLambdas[XY]);
-static void addLuminanceToTables(double results[3][Y][X], double const lambdaR[XY], double lambdaG,
-				 double const lambdaB[XY], double const luminanceLut[XY],
+			Array2D<double> &calTable);
+static void resampleCalTable(const Array2D<double> &calTableIn, CameraMode const &cameraMode,
+			     Array2D<double> &calTableOut);
+static void compensateLambdasForCal(const Array2D<double> &calTable,
+				    const Array2D<double> &oldLambdas,
+				    Array2D<double> &newLambdas);
+static void addLuminanceToTables(std::array<Array2D<double>, 3> &results,
+				 const Array2D<double> &lambdaR, double lambdaG,
+				 const Array2D<double> &lambdaB,
+				 const Array2D<double> &luminanceLut,
 				 double luminanceStrength);
 
 void Alsc::initialise()
@@ -201,7 +207,28 @@ void Alsc::initialise()
 	frameCount2_ = frameCount_ = framePhase_ = 0;
 	firstTime_ = true;
 	ct_ = config_.defaultCt;
+
+	const size_t XY = config_.tableSize.width * config_.tableSize.height;
+
+	for (auto &r : syncResults_)
+		r.resize(config_.tableSize);
+	for (auto &r : prevSyncResults_)
+		r.resize(config_.tableSize);
+	for (auto &r : asyncResults_)
+		r.resize(config_.tableSize);
+
+	luminanceTable_.resize(config_.tableSize);
+	asyncLambdaR_.resize(config_.tableSize);
+	asyncLambdaB_.resize(config_.tableSize);
 	/* The lambdas are initialised in the SwitchMode. */
+	lambdaR_.resize(config_.tableSize);
+	lambdaB_.resize(config_.tableSize);
+
+	/* Temporaries for the computations, but sensible to allocate this up-front! */
+	for (auto &c : tmpC_)
+		c.resize(config_.tableSize);
+	for (auto &m : tmpM_)
+		m.resize(XY);
 }
 
 void Alsc::waitForAysncThread()
@@ -272,9 +299,9 @@ void Alsc::switchMode(CameraMode const &cameraMode,
 		 * the lambdas, but the rest of this code then echoes the code in
 		 * doAlsc, without the adaptive algorithm.
 		 */
-		for (int i = 0; i < XY; i++)
-			lambdaR_[i] = lambdaB_[i] = 1.0;
-		double calTableR[XY], calTableB[XY], calTableTmp[XY];
+		std::fill(lambdaR_.begin(), lambdaR_.end(), 1.0);
+		std::fill(lambdaB_.begin(), lambdaB_.end(), 1.0);
+		Array2D<double> &calTableR = tmpC_[0], &calTableB = tmpC_[1], &calTableTmp = tmpC_[2];
 		getCalTable(ct_, config_.calibrationsCr, calTableTmp);
 		resampleCalTable(calTableTmp, cameraMode_, calTableR);
 		getCalTable(ct_, config_.calibrationsCb, calTableTmp);
@@ -283,7 +310,7 @@ void Alsc::switchMode(CameraMode const &cameraMode,
 		compensateLambdasForCal(calTableB, lambdaB_, asyncLambdaB_);
 		addLuminanceToTables(syncResults_, asyncLambdaR_, 1.0, asyncLambdaB_,
 				     luminanceTable_, config_.luminanceStrength);
-		memcpy(prevSyncResults_, syncResults_, sizeof(prevSyncResults_));
+		prevSyncResults_ = syncResults_;
 		framePhase_ = config_.framePeriod; /* run the algo again asap */
 		firstTime_ = false;
 	}
@@ -294,7 +321,7 @@ void Alsc::fetchAsyncResults()
 	LOG(RPiAlsc, Debug) << "Fetch ALSC results";
 	asyncFinished_ = false;
 	asyncStarted_ = false;
-	memcpy(syncResults_, asyncResults_, sizeof(syncResults_));
+	syncResults_ = asyncResults_;
 }
 
 double getCt(Metadata *metadata, double defaultCt)
@@ -316,9 +343,9 @@ static void copyStats(RgbyRegions &regions, StatisticsPtr &stats,
 	if (!regions.numRegions())
 		regions.init(stats->awbRegions.size());
 
-	double *rTable = (double *)status.r;
-	double *gTable = (double *)status.g;
-	double *bTable = (double *)status.b;
+	const std::vector<double> &rTable = status.r;
+	const std::vector<double> &gTable = status.g;
+	const std::vector<double> &bTable = status.b;
 	for (unsigned int i = 0; i < stats->awbRegions.numRegions(); i++) {
 		auto r = stats->awbRegions.get(i);
 		r.val.rSum = static_cast<uint64_t>(r.val.rSum / rTable[i]);
@@ -344,12 +371,9 @@ void Alsc::restartAsync(StatisticsPtr &stats, Metadata *imageMetadata)
 	if (imageMetadata->get("alsc.status", alscStatus) != 0) {
 		LOG(RPiAlsc, Warning)
 			<< "No ALSC status found for applied gains!";
-		for (int y = 0; y < Y; y++)
-			for (int x = 0; x < X; x++) {
-				alscStatus.r[y][x] = 1.0;
-				alscStatus.g[y][x] = 1.0;
-				alscStatus.b[y][x] = 1.0;
-			}
+		alscStatus.r.resize(config_.tableSize.width * config_.tableSize.height, 1.0);
+		alscStatus.g.resize(config_.tableSize.width * config_.tableSize.height, 1.0);
+		alscStatus.b.resize(config_.tableSize.width * config_.tableSize.height, 1.0);
 	}
 	copyStats(statistics_, stats, alscStatus);
 	framePhase_ = 0;
@@ -380,15 +404,15 @@ void Alsc::prepare(Metadata *imageMetadata)
 			fetchAsyncResults();
 	}
 	/* Apply IIR filter to results and program into the pipeline. */
-	double *ptr = (double *)syncResults_,
-	       *pptr = (double *)prevSyncResults_;
-	for (unsigned int i = 0; i < sizeof(syncResults_) / sizeof(double); i++)
-		pptr[i] = speed * ptr[i] + (1.0 - speed) * pptr[i];
+	for (unsigned int j = 0; j < syncResults_.size(); j++) {
+		for (unsigned int i = 0; i < syncResults_[j].size(); i++)
+			prevSyncResults_[j][i] = speed * syncResults_[j][i] + (1.0 - speed) * prevSyncResults_[j][i];
+	}
 	/* Put output values into status metadata. */
 	AlscStatus status;
-	memcpy(status.r, prevSyncResults_[0], sizeof(status.r));
-	memcpy(status.g, prevSyncResults_[1], sizeof(status.g));
-	memcpy(status.b, prevSyncResults_[2], sizeof(status.b));
+	status.r = prevSyncResults_[0].data();
+	status.g = prevSyncResults_[1].data();
+	status.b = prevSyncResults_[2].data();
 	imageMetadata->set("alsc.status", status);
 }
 
@@ -432,18 +456,17 @@ void Alsc::asyncFunc()
 }
 
 void getCalTable(double ct, std::vector<AlscCalibration> const &calibrations,
-		 double calTable[XY])
+		 Array2D<double> &calTable)
 {
 	if (calibrations.empty()) {
-		for (int i = 0; i < XY; i++)
-			calTable[i] = 1.0;
+		std::fill(calTable.begin(), calTable.end(), 1.0);
 		LOG(RPiAlsc, Debug) << "no calibrations found";
 	} else if (ct <= calibrations.front().ct) {
-		memcpy(calTable, calibrations.front().table, XY * sizeof(double));
+		calTable = calibrations.front().table;
 		LOG(RPiAlsc, Debug) << "using calibration for "
 				    << calibrations.front().ct;
 	} else if (ct >= calibrations.back().ct) {
-		memcpy(calTable, calibrations.back().table, XY * sizeof(double));
+		calTable = calibrations.back().table;
 		LOG(RPiAlsc, Debug) << "using calibration for "
 				    << calibrations.back().ct;
 	} else {
@@ -454,7 +477,7 @@ void getCalTable(double ct, std::vector<AlscCalibration> const &calibrations,
 		LOG(RPiAlsc, Debug)
 			<< "ct is " << ct << ", interpolating between "
 			<< ct0 << " and " << ct1;
-		for (int i = 0; i < XY; i++)
+		for (unsigned int i = 0; i < calTable.size(); i++)
 			calTable[i] =
 				(calibrations[idx].table[i] * (ct1 - ct) +
 				 calibrations[idx + 1].table[i] * (ct - ct0)) /
@@ -462,9 +485,13 @@ void getCalTable(double ct, std::vector<AlscCalibration> const &calibrations,
 	}
 }
 
-void resampleCalTable(double const calTableIn[XY],
-		      CameraMode const &cameraMode, double calTableOut[XY])
+void resampleCalTable(const Array2D<double> &calTableIn,
+		      CameraMode const &cameraMode,
+		      Array2D<double> &calTableOut)
 {
+	int X = calTableIn.dimensions().width;
+	int Y = calTableIn.dimensions().height;
+
 	/*
 	 * Precalculate and cache the x sampling locations and phases to save
 	 * recomputing them on every row.
@@ -501,23 +528,24 @@ void resampleCalTable(double const calTableIn[XY],
 			yLo = Y - 1 - yLo;
 			yHi = Y - 1 - yHi;
 		}
-		double const *rowAbove = calTableIn + X * yLo;
-		double const *rowBelow = calTableIn + X * yHi;
+		double const *rowAbove = calTableIn.ptr() + X * yLo;
+		double const *rowBelow = calTableIn.ptr() + X * yHi;
+		double *out = calTableOut.ptr() + X * j;
 		for (int i = 0; i < X; i++) {
 			double above = rowAbove[xLo[i]] * (1 - xf[i]) +
 				       rowAbove[xHi[i]] * xf[i];
 			double below = rowBelow[xLo[i]] * (1 - xf[i]) +
 				       rowBelow[xHi[i]] * xf[i];
-			*(calTableOut++) = above * (1 - yf) + below * yf;
+			*(out++) = above * (1 - yf) + below * yf;
 		}
 	}
 }
 
 /* Calculate chrominance statistics (R/G and B/G) for each region. */
-static void calculateCrCb(const RgbyRegions &awbRegion, double cr[XY],
-			  double cb[XY], uint32_t minCount, uint16_t minG)
+static void calculateCrCb(const RgbyRegions &awbRegion, Array2D<double> &cr,
+			  Array2D<double> &cb, uint32_t minCount, uint16_t minG)
 {
-	for (int i = 0; i < XY; i++) {
+	for (unsigned int i = 0; i < cr.size(); i++) {
 		auto s = awbRegion.get(i);
 
 		if (s.counted <= minCount || s.val.gSum / s.counted <= minG) {
@@ -530,33 +558,34 @@ static void calculateCrCb(const RgbyRegions &awbRegion, double cr[XY],
 	}
 }
 
-static void applyCalTable(double const calTable[XY], double C[XY])
+static void applyCalTable(const Array2D<double> &calTable, Array2D<double> &C)
 {
-	for (int i = 0; i < XY; i++)
+	for (unsigned int i = 0; i < C.size(); i++)
 		if (C[i] != InsufficientData)
 			C[i] *= calTable[i];
 }
 
-void compensateLambdasForCal(double const calTable[XY],
-			     double const oldLambdas[XY],
-			     double newLambdas[XY])
+void compensateLambdasForCal(const Array2D<double> &calTable,
+			     const Array2D<double> &oldLambdas,
+			     Array2D<double> &newLambdas)
 {
 	double minNewLambda = std::numeric_limits<double>::max();
-	for (int i = 0; i < XY; i++) {
+	for (unsigned int i = 0; i < newLambdas.size(); i++) {
 		newLambdas[i] = oldLambdas[i] * calTable[i];
 		minNewLambda = std::min(minNewLambda, newLambdas[i]);
 	}
-	for (int i = 0; i < XY; i++)
+	for (unsigned int i = 0; i < newLambdas.size(); i++)
 		newLambdas[i] /= minNewLambda;
 }
 
-[[maybe_unused]] static void printCalTable(double const C[XY])
+[[maybe_unused]] static void printCalTable(const Array2D<double> &C)
 {
+	const Size &size = C.dimensions();
 	printf("table: [\n");
-	for (int j = 0; j < Y; j++) {
-		for (int i = 0; i < X; i++) {
-			printf("%5.3f", 1.0 / C[j * X + i]);
-			if (i != X - 1 || j != Y - 1)
+	for (unsigned int j = 0; j < size.height; j++) {
+		for (unsigned int i = 0; i < size.width; i++) {
+			printf("%5.3f", 1.0 / C[j * size.width + i]);
+			if (i != size.width - 1 || j != size.height - 1)
 				printf(",");
 		}
 		printf("\n");
@@ -577,9 +606,13 @@ static double computeWeight(double Ci, double Cj, double sigma)
 }
 
 /* Compute all weights. */
-static void computeW(double const C[XY], double sigma, double W[XY][4])
+static void computeW(const Array2D<double> &C, double sigma,
+		     SparseArray<double> &W)
 {
-	for (int i = 0; i < XY; i++) {
+	size_t XY = C.size();
+	size_t X = C.dimensions().width;
+
+	for (unsigned int i = 0; i < XY; i++) {
 		/* Start with neighbour above and go clockwise. */
 		W[i][0] = i >= X ? computeWeight(C[i], C[i - X], sigma) : 0;
 		W[i][1] = i % X < X - 1 ? computeWeight(C[i], C[i + 1], sigma) : 0;
@@ -589,11 +622,15 @@ static void computeW(double const C[XY], double sigma, double W[XY][4])
 }
 
 /* Compute M, the large but sparse matrix such that M * lambdas = 0. */
-static void constructM(double const C[XY], double const W[XY][4],
-		       double M[XY][4])
+static void constructM(const Array2D<double> &C,
+		       const SparseArray<double> &W,
+		       SparseArray<double> &M)
 {
+	size_t XY = C.size();
+	size_t X = C.dimensions().width;
+
 	double epsilon = 0.001;
-	for (int i = 0; i < XY; i++) {
+	for (unsigned int i = 0; i < XY; i++) {
 		/*
 		 * Note how, if C[i] == INSUFFICIENT_DATA, the weights will all
 		 * be zero so the equation is still set up correctly.
@@ -614,44 +651,44 @@ static void constructM(double const C[XY], double const W[XY][4],
  * left/right neighbours are zero down the left/right edges, so we don't need
  * need to test the i value to exclude them.
  */
-static double computeLambdaBottom(int i, double const M[XY][4],
-				  double lambda[XY])
+static double computeLambdaBottom(int i, const SparseArray<double> &M,
+				  Array2D<double> &lambda)
 {
-	return M[i][1] * lambda[i + 1] + M[i][2] * lambda[i + X] +
+	return M[i][1] * lambda[i + 1] + M[i][2] * lambda[i + lambda.dimensions().width] +
 	       M[i][3] * lambda[i - 1];
 }
-static double computeLambdaBottomStart(int i, double const M[XY][4],
-				       double lambda[XY])
+static double computeLambdaBottomStart(int i, const SparseArray<double> &M,
+				       Array2D<double> &lambda)
 {
-	return M[i][1] * lambda[i + 1] + M[i][2] * lambda[i + X];
+	return M[i][1] * lambda[i + 1] + M[i][2] * lambda[i + lambda.dimensions().width];
 }
-static double computeLambdaInterior(int i, double const M[XY][4],
-				    double lambda[XY])
+static double computeLambdaInterior(int i, const SparseArray<double> &M,
+				    Array2D<double> &lambda)
 {
-	return M[i][0] * lambda[i - X] + M[i][1] * lambda[i + 1] +
-	       M[i][2] * lambda[i + X] + M[i][3] * lambda[i - 1];
+	return M[i][0] * lambda[i - lambda.dimensions().width] + M[i][1] * lambda[i + 1] +
+	       M[i][2] * lambda[i + lambda.dimensions().width] + M[i][3] * lambda[i - 1];
 }
-static double computeLambdaTop(int i, double const M[XY][4],
-			       double lambda[XY])
+static double computeLambdaTop(int i, const SparseArray<double> &M,
+			       Array2D<double> &lambda)
 {
-	return M[i][0] * lambda[i - X] + M[i][1] * lambda[i + 1] +
+	return M[i][0] * lambda[i - lambda.dimensions().width] + M[i][1] * lambda[i + 1] +
 	       M[i][3] * lambda[i - 1];
 }
-static double computeLambdaTopEnd(int i, double const M[XY][4],
-				  double lambda[XY])
+static double computeLambdaTopEnd(int i, const SparseArray<double> &M,
+				  Array2D<double> &lambda)
 {
-	return M[i][0] * lambda[i - X] + M[i][3] * lambda[i - 1];
+	return M[i][0] * lambda[i - lambda.dimensions().width] + M[i][3] * lambda[i - 1];
 }
 
 /* Gauss-Seidel iteration with over-relaxation. */
-static double gaussSeidel2Sor(double const M[XY][4], double omega,
-			      double lambda[XY], double lambdaBound)
+static double gaussSeidel2Sor(const SparseArray<double> &M, double omega,
+			      Array2D<double> &lambda, double lambdaBound)
 {
+	int XY = lambda.size();
+	int X = lambda.dimensions().width;
 	const double min = 1 - lambdaBound, max = 1 + lambdaBound;
-	double oldLambda[XY];
+	Array2D<double> oldLambda = lambda;
 	int i;
-	for (i = 0; i < XY; i++)
-		oldLambda[i] = lambda[i];
 	lambda[0] = computeLambdaBottomStart(0, M, lambda);
 	lambda[0] = std::clamp(lambda[0], min, max);
 	for (i = 1; i < X; i++) {
@@ -698,32 +735,31 @@ static double gaussSeidel2Sor(double const M[XY][4], double omega,
 }
 
 /* Normalise the values so that the smallest value is 1. */
-static void normalise(double *ptr, size_t n)
+static void normalise(Array2D<double> &results)
 {
-	double minval = ptr[0];
-	for (size_t i = 1; i < n; i++)
-		minval = std::min(minval, ptr[i]);
-	for (size_t i = 0; i < n; i++)
-		ptr[i] /= minval;
+	double minval = *std::min_element(results.begin(), results.end());
+	std::for_each(results.begin(), results.end(),
+		      [minval](double val) { return val / minval; });
 }
 
 /* Rescale the values so that the average value is 1. */
-static void reaverage(Span<double> data)
+static void reaverage(Array2D<double> &data)
 {
 	double sum = std::accumulate(data.begin(), data.end(), 0.0);
 	double ratio = 1 / (sum / data.size());
-	for (double &d : data)
-		d *= ratio;
+	std::for_each(data.begin(), data.end(),
+		      [ratio](double val) { return val * ratio; });
 }
 
-static void runMatrixIterations(double const C[XY], double lambda[XY],
-				double const W[XY][4], double omega,
-				int nIter, double threshold, double lambdaBound)
+static void runMatrixIterations(const Array2D<double> &C,
+				Array2D<double> &lambda,
+				const SparseArray<double> &W,
+				SparseArray<double> &M, double omega,
+				unsigned int nIter, double threshold, double lambdaBound)
 {
-	double M[XY][4];
 	constructM(C, W, M);
 	double lastMaxDiff = std::numeric_limits<double>::max();
-	for (int i = 0; i < nIter; i++) {
+	for (unsigned int i = 0; i < nIter; i++) {
 		double maxDiff = fabs(gaussSeidel2Sor(M, omega, lambda, lambdaBound));
 		if (maxDiff < threshold) {
 			LOG(RPiAlsc, Debug)
@@ -741,39 +777,44 @@ static void runMatrixIterations(double const C[XY], double lambda[XY],
 		lastMaxDiff = maxDiff;
 	}
 	/* We're going to normalise the lambdas so the total average is 1. */
-	reaverage({ lambda, XY });
+	reaverage(lambda);
 }
 
-static void addLuminanceRb(double result[XY], double const lambda[XY],
-			   double const luminanceLut[XY],
+static void addLuminanceRb(Array2D<double> &result, const Array2D<double> &lambda,
+			   const Array2D<double> &luminanceLut,
 			   double luminanceStrength)
 {
-	for (int i = 0; i < XY; i++)
+	for (unsigned int i = 0; i < result.size(); i++)
 		result[i] = lambda[i] * ((luminanceLut[i] - 1) * luminanceStrength + 1);
 }
 
-static void addLuminanceG(double result[XY], double lambda,
-			  double const luminanceLut[XY],
+static void addLuminanceG(Array2D<double> &result, double lambda,
+			  const Array2D<double> &luminanceLut,
 			  double luminanceStrength)
 {
-	for (int i = 0; i < XY; i++)
+	for (unsigned int i = 0; i < result.size(); i++)
 		result[i] = lambda * ((luminanceLut[i] - 1) * luminanceStrength + 1);
 }
 
-void addLuminanceToTables(double results[3][Y][X], double const lambdaR[XY],
-			  double lambdaG, double const lambdaB[XY],
-			  double const luminanceLut[XY],
+void addLuminanceToTables(std::array<Array2D<double>, 3> &results,
+			  const Array2D<double> &lambdaR,
+			  double lambdaG, const Array2D<double> &lambdaB,
+			  const Array2D<double> &luminanceLut,
 			  double luminanceStrength)
 {
-	addLuminanceRb((double *)results[0], lambdaR, luminanceLut, luminanceStrength);
-	addLuminanceG((double *)results[1], lambdaG, luminanceLut, luminanceStrength);
-	addLuminanceRb((double *)results[2], lambdaB, luminanceLut, luminanceStrength);
-	normalise((double *)results, 3 * XY);
+	addLuminanceRb(results[0], lambdaR, luminanceLut, luminanceStrength);
+	addLuminanceG(results[1], lambdaG, luminanceLut, luminanceStrength);
+	addLuminanceRb(results[2], lambdaB, luminanceLut, luminanceStrength);
+	for (auto &r : results)
+		normalise(r);
 }
 
 void Alsc::doAlsc()
 {
-	double cr[XY], cb[XY], wr[XY][4], wb[XY][4], calTableR[XY], calTableB[XY], calTableTmp[XY];
+	Array2D<double> &cr = tmpC_[0], &cb = tmpC_[1], &calTableR = tmpC_[2],
+			&calTableB = tmpC_[3], &calTableTmp = tmpC_[4];
+	SparseArray<double> &wr = tmpM_[0], &wb = tmpM_[1], &M = tmpM_[2];
+
 	/*
 	 * Calculate our R/B ("Cr"/"Cb") colour statistics, and assess which are
 	 * usable.
@@ -799,9 +840,9 @@ void Alsc::doAlsc()
 	computeW(cr, config_.sigmaCr, wr);
 	computeW(cb, config_.sigmaCb, wb);
 	/* Run Gauss-Seidel iterations over the resulting matrix, for R and B. */
-	runMatrixIterations(cr, lambdaR_, wr, config_.omega, config_.nIter,
+	runMatrixIterations(cr, lambdaR_, wr, M, config_.omega, config_.nIter,
 			    config_.threshold, config_.lambdaBound);
-	runMatrixIterations(cb, lambdaB_, wb, config_.omega, config_.nIter,
+	runMatrixIterations(cb, lambdaB_, wb, M, config_.omega, config_.nIter,
 			    config_.threshold, config_.lambdaBound);
 	/*
 	 * Fold the calibrated gains into our final lambda values. (Note that on
