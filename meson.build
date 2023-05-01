@@ -2,7 +2,7 @@
 
 project('libcamera', 'c', 'cpp',
     meson_version : '>= 0.56',
-    version : '0.0.4',
+    version : '0.0.5',
     default_options : [
         'werror=true',
         'warning_level=2',
@@ -128,6 +128,21 @@ if cc.get_id() == 'gcc'
     if cc.version().version_compare('<9')
         cpp_arguments += [
             '-lstdc++fs',
+        ]
+    endif
+
+    # gcc 13 implements the C++23 version of automatic move from local
+    # variables in return statements (see
+    # https://en.cppreference.com/w/cpp/language/return). As a result, some
+    # previously required explicit std::move() in return statements generate
+    # warnings. Those moves can't be removed as older compiler versions could
+    # use copy constructors instead of move constructors. The easiest fix is to
+    # disable the warning. With -Wpessimizing-move enabled, the compiler will
+    # still warn of pessimizing moves, only the redundant but not pessimizing
+    # moves will be ignored.
+    if cc.version().version_compare('>=13')
+        cpp_arguments += [
+            '-Wno-redundant-move',
         ]
     endif
 
