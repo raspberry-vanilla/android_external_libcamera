@@ -5,7 +5,6 @@
  * generic_camera_buffer.cpp - Allocate FrameBuffer using gralloc API
  */
 
-#include <dlfcn.h>
 #include <memory>
 #include <vector>
 
@@ -73,10 +72,9 @@ class PlatformFrameBufferAllocator::Private : public Extensible::Private
 public:
 	Private(CameraDevice *const cameraDevice)
 		: cameraDevice_(cameraDevice),
-		  hardwareModule_(nullptr),
+		  hardwareModule_(cameraDevice->camera3Device()->common.module),
 		  allocDevice_(nullptr)
 	{
-		hw_get_module(GRALLOC_HARDWARE_MODULE_ID, &hardwareModule_);
 		ASSERT(hardwareModule_);
 	}
 
@@ -87,7 +85,7 @@ public:
 
 private:
 	const CameraDevice *const cameraDevice_;
-	const struct hw_module_t *hardwareModule_;
+	struct hw_module_t *const hardwareModule_;
 	struct alloc_device_t *allocDevice_;
 };
 
@@ -95,7 +93,6 @@ PlatformFrameBufferAllocator::Private::~Private()
 {
 	if (allocDevice_)
 		gralloc_close(allocDevice_);
-	dlclose(hardwareModule_->dso);
 }
 
 std::unique_ptr<HALFrameBuffer>
