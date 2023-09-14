@@ -11,6 +11,7 @@ if platform == 'generic'
         android_deps += [libhardware]
     else
         android_hal_sources += files(['libhardware_stub.c'])
+        android_hal_sources += files(['graphic_buffer_allocator_stub.cpp'])
     endif
 elif platform == 'cros'
     android_hal_sources += files(['cros_camera_buffer.cpp',
