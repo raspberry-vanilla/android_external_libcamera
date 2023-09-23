@@ -12,6 +12,13 @@ if platform == 'generic'
     else
         android_hal_sources += files(['libhardware_stub.c'])
     endif
+
+    libui = dependency('libui', required : false)
+    if libui.found()
+        android_deps += [libui]
+    else
+        android_hal_sources += files(['graphic_buffer_allocator_stub.cpp'])
+    endif
 elif platform == 'cros'
     android_hal_sources += files(['cros_camera_buffer.cpp',
                                   'cros_frame_buffer_allocator.cpp'])
