@@ -184,10 +184,8 @@ define m-c-flags
 endef
 
 define filter-c-flags
-  $(subst -std=gnu++17,, \
-  $(subst -fno-rtti,, \
-  $(patsubst  -W%,, \
-    $1)))
+  $(filter-out -std=gnu++17 -fno-rtti -enable-trivial-auto-var-init-zero-knowing-it-will-be-removed-from-clang, \
+    $(patsubst  -W%,, $1))
 endef
 
 define m-c-includes-common
