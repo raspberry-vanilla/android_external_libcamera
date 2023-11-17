@@ -290,8 +290,11 @@ CameraConfiguration::Status RPiCameraConfiguration::validate()
 		if (ret)
 			return Invalid;
 
+		// Android doesn't support color space. Don't report status as adjusted.
+		/*
 		if (RPi::PipelineHandlerBase::updateStreamConfig(out.cfg, out.format))
 			status = Adjusted;
+		*/
 	}
 
 	return status;
