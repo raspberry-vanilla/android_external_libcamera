@@ -17,6 +17,12 @@ include $(CLEAR_VARS)
 LOCAL_SHARED_LIBRARIES := libc libexif libjpeg libdl libyaml libyuv_chromium libudev libevent libcrypto
 MESON_GEN_PKGCONFIGS := libexif libjpeg dl yaml-0.1 libyuv libudev libevent_pthreads libcrypto
 
+ifeq ($(BOARD_LIBCAMERA_PIPELINES),rpi/pisp)
+LOCAL_HEADER_LIBRARIES += libpisp_headers
+LOCAL_SHARED_LIBRARIES += libpisp
+MESON_GEN_PKGCONFIGS += libpisp
+endif
+
 ifeq ($(TARGET_IS_64_BIT),true)
 LOCAL_MULTILIB := 64
 else
@@ -84,8 +90,10 @@ LOCAL_SHARED_LIBRARIES += libcamera libcamera-base
 # Modules 'camera.libcamera', produces '/vendor/lib{64}/hw/camera.libcamera.so' HAL
 $(eval $(call libcamera-lib,camera.libcamera,hw,LIBCAMERA_HAL_BIN))
 
-$(eval $(call libcamera-lib,ipa_rpi_vc4,libcamera,LIBCAMERA_IPA_RPI_BIN))
-$(eval $(call libcamera-etc,ipa_rpi_vc4.so.sign,libcamera,LIBCAMERA_IPA_RPI_SIGN))
+$(eval $(call libcamera-lib,ipa_rpi_vc4,libcamera,LIBCAMERA_IPA_RPI_VC4_BIN))
+$(eval $(call libcamera-etc,ipa_rpi_vc4.so.sign,libcamera,LIBCAMERA_IPA_RPI_VC4_SIGN))
+$(eval $(call libcamera-lib,ipa_rpi_pisp,libcamera,LIBCAMERA_IPA_RPI_PISP_BIN))
+$(eval $(call libcamera-etc,ipa_rpi_pisp.so.sign,libcamera,LIBCAMERA_IPA_RPI_PISP_SIGN))
 $(eval $(call libcamera-exec,raspberrypi_ipa_proxy,libcamera,LIBCAMERA_IPA_RPI_PROXY))
 
 #-------------------------------------------------------------------------------
