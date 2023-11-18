@@ -687,7 +687,7 @@ void IpaPiSP::applyTdn(const TdnStatus *tdnStatus, const DeviceStatus *deviceSta
 	utils::Duration exposure = deviceStatus->shutterSpeed * deviceStatus->analogueGain;
 	pisp_be_tdn_config tdn = {};
 
-	double ratio = tdnReset_ ? 1.0 : exposure / lastExposure_;
+	double ratio = tdnReset_ ? 1.0 : exposure.count() / lastExposure_.count();
 	if (ratio >= 4.0) {
 		/* If the exposure ratio goes above 4x, we need to reset TDN. */
 		ratio = 1;
@@ -842,7 +842,7 @@ bool IpaPiSP::applyStitch(const StitchStatus *stitchStatus, const DeviceStatus *
 
 	utils::Duration otherExposure = lastStitchExposures_[otherChannel];
 	bool phaseLong = hdrStatus->channel == "long";
-	double ratio = phaseLong ? otherExposure / exposure : exposure / otherExposure;
+	double ratio = phaseLong ? otherExposure.count() / exposure.count() : exposure.count() / otherExposure.count();
 
 	pisp_be_stitch_config stitch = {};
 	stitch.exposure_ratio = clampField(ratio, 15, 15);
