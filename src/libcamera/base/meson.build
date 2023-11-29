@@ -45,7 +45,6 @@ libcamera_base_deps = [
 ]
 
 if host_machine.system() == 'android'
-    libcamera_version = ''
     libcamera_soversion = ''
 endif
 
