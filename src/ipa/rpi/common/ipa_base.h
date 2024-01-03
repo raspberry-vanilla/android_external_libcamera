@@ -22,6 +22,7 @@
 #include "controller/agc_status.h"
 #include "controller/camera_mode.h"
 #include "controller/controller.h"
+#include "controller/hdr_status.h"
 #include "controller/metadata.h"
 
 namespace libcamera {
@@ -87,9 +88,6 @@ private:
 
 	std::map<unsigned int, MappedFrameBuffer> buffers_;
 
-	bool lensPresent_;
-	bool monoSensor_;
-	ControlList libcameraMetadata_;
 
 	std::array<RPiController::Metadata, numMetadataContexts> rpiMetadata_;
 
@@ -123,6 +121,17 @@ private:
 		int32_t mode;
 		utils::Duration manualPeriod;
 	} flickerState_;
+
+protected:
+	/* Remember the HDR status after a mode switch. */
+	HdrStatus hdrStatus_;
+
+	/* Whether the stitch block (if available) needs to swap buffers. */
+	bool stitchSwapBuffers_;
+	bool monoSensor_;
+	bool lensPresent_;
+	bool statsMetadataOutput_;
+	ControlList libcameraMetadata_;
 };
 
 } /* namespace ipa::RPi */
