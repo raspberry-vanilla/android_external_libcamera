@@ -140,6 +140,8 @@ private:
 		int32_t mode;
 		utils::Duration manualPeriod;
 	} flickerState_;
+
+	bool cnnEnableInputTensor_;
 };
 
 } /* namespace ipa::RPi */
