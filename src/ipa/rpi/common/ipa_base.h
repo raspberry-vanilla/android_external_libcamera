@@ -141,6 +141,7 @@ private:
 		utils::Duration manualPeriod;
 	} flickerState_;
 
+	bool cnnEnableInputTensor_;
 	bool awbEnabled_;
 
 	utils::Duration controllerMinFrameDuration_;
