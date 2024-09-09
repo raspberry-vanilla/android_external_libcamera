@@ -10,6 +10,7 @@ rpi_ipa_cam_helper_sources = files([
     'cam_helper_imx355.cpp',
     'cam_helper_imx415.cpp',
     'cam_helper_imx477.cpp',
+    'cam_helper_imx500.cpp',
     'cam_helper_imx519.cpp',
     'cam_helper_imx708.cpp',
     'cam_helper_mira220.cpp',
@@ -25,6 +26,8 @@ rpi_ipa_cam_helper_sources = files([
 rpi_ipa_cam_helper_includes = [
     include_directories('..'),
 ]
+
+subdir('imx500_tensor_parser')
 
 rpi_ipa_cam_helper_deps = [
     libcamera_private,
