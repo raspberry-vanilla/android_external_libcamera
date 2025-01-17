@@ -29,7 +29,6 @@ namespace android {
 namespace hardware {
 namespace camera {
 namespace provider {
-namespace V2_5 {
 namespace implementation {
 
 using ::android::hardware::camera::common::V1_0::CameraDeviceStatus;
@@ -127,7 +126,6 @@ protected:
 };
 
 }  // namespace implementation
-}  // namespace V2_5
 }  // namespace provider
 }  // namespace camera
 }  // namespace hardware
