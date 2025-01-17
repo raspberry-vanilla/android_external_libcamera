@@ -15,9 +15,9 @@
  */
 
 #ifdef LAZY_SERVICE
-#define LOG_TAG "android.hardware.camera.provider@2.5-service-lazy"
+#define LOG_TAG "LibcameraProvider-service-lazy"
 #else
-#define LOG_TAG "android.hardware.camera.provider@2.5-service"
+#define LOG_TAG "LibcameraProvider-service-lazy"
 #endif
 
 #include <android/hardware/camera/provider/2.5/ICameraProvider.h>
@@ -39,7 +39,7 @@ const bool kLazyService = false;
 
 int main()
 {
-    ALOGI("CameraProvider@2.5 legacy service is starting.");
+    ALOGI("LibcameraProvider libcamera service is starting.");
     // The camera HAL may communicate to other vendor components via
     // /dev/vndbinder
     android::ProcessState::initWithDriver("/dev/vndbinder");
@@ -57,10 +57,10 @@ int main()
 
     status_t status;
     if (kLazyService) {
-        status = defaultLazyPassthroughServiceImplementation<ICameraProvider>("legacy/0",
+        status = defaultLazyPassthroughServiceImplementation<ICameraProvider>("libcamera/0",
                                                                               /*maxThreads*/ 6);
     } else {
-        status = defaultPassthroughServiceImplementation<ICameraProvider>("legacy/0",
+        status = defaultPassthroughServiceImplementation<ICameraProvider>("libcamera/0",
                                                                           /*maxThreads*/ 6);
     }
     return status;

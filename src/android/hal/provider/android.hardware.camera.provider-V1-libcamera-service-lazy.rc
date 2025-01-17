@@ -1,0 +1,10 @@
+service vendor.camera.provider-libcamera /vendor/bin/hw/android.hardware.camera.provider-V1-libcamera-service-lazy
+    interface android.hardware.camera.provider@2.5::ICameraProvider libcamera/0
+    oneshot
+    disabled
+    class hal
+    user cameraserver
+    group audio camera input drmrpc
+    ioprio rt 4
+    capabilities SYS_NICE
+    task_profiles CameraServiceCapacity MaxPerformance

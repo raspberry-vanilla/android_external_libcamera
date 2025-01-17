@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-#define LOG_TAG "CamPrvdr@2.5-legacy"
+#define LOG_TAG "LibcameraProvider"
 //#define LOG_NDEBUG 0
 #include <android/log.h>
 
-#include "LegacyCameraProviderImpl_2_5.h"
+#include "LibcameraProvider.h"
 #include "CameraDevice_1_0.h"
 #include "CameraDevice_3_3.h"
 #include "CameraDevice_3_4.h"
@@ -36,8 +36,8 @@ namespace V2_5 {
 namespace implementation {
 
 namespace {
-// "device@<version>/legacy/<id>"
-const std::regex kDeviceNameRE("device@([0-9]+\\.[0-9]+)/legacy/(.+)");
+// "device@<version>/libcamera/<id>"
+const std::regex kDeviceNameRE("device@([0-9]+\\.[0-9]+)/libcamera/(.+)");
 const char *kHAL3_4 = "3.4";
 const char *kHAL3_5 = "3.5";
 const int kMaxCameraDeviceNameLen = 128;
@@ -64,7 +64,7 @@ bool matchDeviceName(const hidl_string& deviceName, std::string* deviceVersion,
 using ::android::hardware::camera::common::V1_0::CameraMetadataType;
 using ::android::hardware::camera::common::V1_0::Status;
 
-void LegacyCameraProviderImpl_2_5::addDeviceNames(int camera_id, CameraDeviceStatus status, bool cam_new)
+void LibcameraProvider::addDeviceNames(int camera_id, CameraDeviceStatus status, bool cam_new)
 {
     char cameraId[kMaxCameraIdLen];
     snprintf(cameraId, sizeof(cameraId), "%d", camera_id);
@@ -104,7 +104,7 @@ void LegacyCameraProviderImpl_2_5::addDeviceNames(int camera_id, CameraDeviceSta
     }
 }
 
-void LegacyCameraProviderImpl_2_5::removeDeviceNames(int camera_id)
+void LibcameraProvider::removeDeviceNames(int camera_id)
 {
     std::string cameraIdStr = std::to_string(camera_id);
 
@@ -131,12 +131,12 @@ void LegacyCameraProviderImpl_2_5::removeDeviceNames(int camera_id)
 /**
  * static callback forwarding methods from HAL to instance
  */
-void LegacyCameraProviderImpl_2_5::sCameraDeviceStatusChange(
+void LibcameraProvider::sCameraDeviceStatusChange(
         const struct camera_module_callbacks* callbacks,
         int camera_id,
         int new_status) {
-    LegacyCameraProviderImpl_2_5* cp = const_cast<LegacyCameraProviderImpl_2_5*>(
-            static_cast<const LegacyCameraProviderImpl_2_5*>(callbacks));
+    LibcameraProvider* cp = const_cast<LibcameraProvider*>(
+            static_cast<const LibcameraProvider*>(callbacks));
     if (cp == nullptr) {
         ALOGE("%s: callback ops is null", __FUNCTION__);
         return;
@@ -177,12 +177,12 @@ void LegacyCameraProviderImpl_2_5::sCameraDeviceStatusChange(
     }
 }
 
-void LegacyCameraProviderImpl_2_5::sTorchModeStatusChange(
+void LibcameraProvider::sTorchModeStatusChange(
         const struct camera_module_callbacks* callbacks,
         const char* camera_id,
         int new_status) {
-    LegacyCameraProviderImpl_2_5* cp = const_cast<LegacyCameraProviderImpl_2_5*>(
-            static_cast<const LegacyCameraProviderImpl_2_5*>(callbacks));
+    LibcameraProvider* cp = const_cast<LibcameraProvider*>(
+            static_cast<const LibcameraProvider*>(callbacks));
 
     if (cp == nullptr) {
         ALOGE("%s: callback ops is null", __FUNCTION__);
@@ -202,7 +202,7 @@ void LegacyCameraProviderImpl_2_5::sTorchModeStatusChange(
     }
 }
 
-Status LegacyCameraProviderImpl_2_5::getHidlStatus(int status) {
+Status LibcameraProvider::getHidlStatus(int status) {
     switch (status) {
         case 0: return Status::OK;
         case -ENODEV: return Status::INTERNAL_ERROR;
@@ -213,13 +213,13 @@ Status LegacyCameraProviderImpl_2_5::getHidlStatus(int status) {
     }
 }
 
-std::string LegacyCameraProviderImpl_2_5::getLegacyCameraId(const hidl_string& deviceName) {
+std::string LibcameraProvider::getLegacyCameraId(const hidl_string& deviceName) {
     std::string cameraId;
     matchDeviceName(deviceName, nullptr, &cameraId);
     return cameraId;
 }
 
-std::string LegacyCameraProviderImpl_2_5::getHidlDeviceName(
+std::string LibcameraProvider::getHidlDeviceName(
         std::string cameraId, int deviceVersion) {
     // Maybe consider create a version check method and SortedVec to speed up?
     if (deviceVersion != CAMERA_DEVICE_API_VERSION_1_0 &&
@@ -249,20 +249,20 @@ std::string LegacyCameraProviderImpl_2_5::getHidlDeviceName(
         versionMinor = 5;
     }
     char deviceName[kMaxCameraDeviceNameLen];
-    snprintf(deviceName, sizeof(deviceName), "device@%d.%d/legacy/%s",
+    snprintf(deviceName, sizeof(deviceName), "device@%d.%d/libcamera/%s",
             versionMajor, versionMinor, cameraId.c_str());
     return deviceName;
 }
 
-LegacyCameraProviderImpl_2_5::LegacyCameraProviderImpl_2_5() :
+LibcameraProvider::LibcameraProvider() :
         camera_module_callbacks_t({sCameraDeviceStatusChange,
                                    sTorchModeStatusChange}) {
     mInitFailed = initialize();
 }
 
-LegacyCameraProviderImpl_2_5::~LegacyCameraProviderImpl_2_5() {}
+LibcameraProvider::~LibcameraProvider() {}
 
-bool LegacyCameraProviderImpl_2_5::initialize() {
+bool LibcameraProvider::initialize() {
     camera_module_t *rawModule;
     int err = hw_get_module(CAMERA_HARDWARE_MODULE_ID,
             (const hw_module_t **)&rawModule);
@@ -339,7 +339,7 @@ bool LegacyCameraProviderImpl_2_5::initialize() {
 /**
  * Check that the device HAL version is still in supported.
  */
-int LegacyCameraProviderImpl_2_5::checkCameraVersion(int id, camera_info info) {
+int LibcameraProvider::checkCameraVersion(int id, camera_info info) {
     if (mModule == nullptr) {
         return NO_INIT;
     }
@@ -386,7 +386,7 @@ int LegacyCameraProviderImpl_2_5::checkCameraVersion(int id, camera_info info) {
     return OK;
 }
 
-bool LegacyCameraProviderImpl_2_5::setUpVendorTags() {
+bool LibcameraProvider::setUpVendorTags() {
     ATRACE_CALL();
     vendor_tag_ops_t vOps = vendor_tag_ops_t();
 
@@ -443,7 +443,7 @@ bool LegacyCameraProviderImpl_2_5::setUpVendorTags() {
 }
 
 // Methods from ::android::hardware::camera::provider::V2_5::ICameraProvider follow.
-Return<Status> LegacyCameraProviderImpl_2_5::setCallback(
+Return<Status> LibcameraProvider::setCallback(
         const sp<ICameraProviderCallback>& callback) {
     Mutex::Autolock _l(mCbLock);
     mCallbacks = callback;
@@ -462,13 +462,13 @@ Return<Status> LegacyCameraProviderImpl_2_5::setCallback(
     return Status::OK;
 }
 
-Return<void> LegacyCameraProviderImpl_2_5::getVendorTags(
+Return<void> LibcameraProvider::getVendorTags(
         ICameraProvider::getVendorTags_cb _hidl_cb) {
     _hidl_cb(Status::OK, mVendorTagSections);
     return Void();
 }
 
-Return<void> LegacyCameraProviderImpl_2_5::getCameraIdList(
+Return<void> LibcameraProvider::getCameraIdList(
         ICameraProvider::getCameraIdList_cb _hidl_cb) {
     std::vector<hidl_string> deviceNameList;
     for (auto const& deviceNamePair : mCameraDeviceNames) {
@@ -486,14 +486,14 @@ Return<void> LegacyCameraProviderImpl_2_5::getCameraIdList(
     return Void();
 }
 
-Return<void> LegacyCameraProviderImpl_2_5::isSetTorchModeSupported(
+Return<void> LibcameraProvider::isSetTorchModeSupported(
         ICameraProvider::isSetTorchModeSupported_cb _hidl_cb) {
     bool support = mModule->isSetTorchModeSupported();
     _hidl_cb (Status::OK, support);
     return Void();
 }
 
-Return<void> LegacyCameraProviderImpl_2_5::getCameraDeviceInterface_V1_x(
+Return<void> LibcameraProvider::getCameraDeviceInterface_V1_x(
         const hidl_string& cameraDeviceName,
         ICameraProvider::getCameraDeviceInterface_V1_x_cb _hidl_cb)  {
     std::string cameraId, deviceVersion;
@@ -547,7 +547,7 @@ Return<void> LegacyCameraProviderImpl_2_5::getCameraDeviceInterface_V1_x(
     return Void();
 }
 
-Return<void> LegacyCameraProviderImpl_2_5::getCameraDeviceInterface_V3_x(
+Return<void> LibcameraProvider::getCameraDeviceInterface_V3_x(
         const hidl_string& cameraDeviceName,
         ICameraProvider::getCameraDeviceInterface_V3_x_cb _hidl_cb)  {
     std::string cameraId, deviceVersion;
@@ -647,7 +647,7 @@ Return<void> LegacyCameraProviderImpl_2_5::getCameraDeviceInterface_V3_x(
     return Void();
 }
 
-Return<void> LegacyCameraProviderImpl_2_5::notifyDeviceStateChange(
+Return<void> LibcameraProvider::notifyDeviceStateChange(
         hidl_bitfield<DeviceState> newState) {
     ALOGD("%s: New device state: 0x%" PRIx64, __FUNCTION__, newState);
     uint64_t state = static_cast<uint64_t>(newState);

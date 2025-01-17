@@ -49,17 +49,17 @@ using ::android::sp;
 using ::android::Mutex;
 
 /**
- * The implementation of legacy wrapper CameraProvider 2.5, separated
+ * The implementation of libcamera wrapper CameraProvider 2.5, separated
  * from the HIDL interface layer to allow for implementation reuse by later
  * provider versions.
  *
  * This implementation supports cameras implemented via the legacy libhardware
  * camera HAL definitions.
  */
-struct LegacyCameraProviderImpl_2_5 : public ICameraProvider,
-                                      public camera_module_callbacks_t {
-    LegacyCameraProviderImpl_2_5();
-    ~LegacyCameraProviderImpl_2_5();
+struct LibcameraProvider : public ICameraProvider,
+                           public camera_module_callbacks_t {
+    LibcameraProvider();
+    ~LibcameraProvider();
 
     // Caller must use this method to check if CameraProvider ctor failed
     bool isInitFailed() { return mInitFailed; }
@@ -86,7 +86,7 @@ protected:
     int mNumberOfLegacyCameras;
     std::map<std::string, camera_device_status_t> mCameraStatusMap; // camera id -> status
     std::map<std::string, bool> mOpenLegacySupported; // camera id -> open_legacy HAL1.0 supported
-    SortedVector<std::string> mCameraIds; // the "0"/"1" legacy camera Ids
+    SortedVector<std::string> mCameraIds; // the "0"/"1" libcamera camera Ids
     // (cameraId string, hidl device name) pairs
     SortedVector<std::pair<std::string, std::string>> mCameraDeviceNames;
 
@@ -104,7 +104,7 @@ protected:
     // create HIDL device name from camera ID and legacy device version
     std::string getHidlDeviceName(std::string cameraId, int deviceVersion);
 
-    // extract legacy camera ID/device version from a HIDL device name
+    // extract libcamera camera ID/device version from a HIDL device name
     static std::string getLegacyCameraId(const hidl_string& deviceName);
 
     // convert conventional HAL status to HIDL Status
