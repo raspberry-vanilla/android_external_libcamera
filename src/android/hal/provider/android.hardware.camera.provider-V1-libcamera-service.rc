@@ -1,0 +1,10 @@
+service vendor.camera.provider-libcamera /vendor/bin/hw/android.hardware.camera.provider-V1-libcamera-service
+    interface aidl android.hardware.camera.provider.ICameraProvider/libcamera/0
+    class hal
+    user cameraserver
+    group audio camera input drmrpc
+    ioprio rt 4
+    capabilities SYS_NICE
+    task_profiles CameraServiceCapacity MaxPerformance
+    setenv LIBCAMERA_LOG_LEVELS *:WARN
+    setenv LIBCAMERA_LOG_FILE syslog
