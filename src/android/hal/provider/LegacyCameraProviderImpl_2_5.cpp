@@ -23,7 +23,6 @@
 #include "CameraDevice_3_3.h"
 #include "CameraDevice_3_4.h"
 #include "CameraDevice_3_5.h"
-#include "CameraProvider_2_5.h"
 #include <cutils/properties.h>
 #include <regex>
 #include <string.h>
@@ -35,8 +34,6 @@ namespace camera {
 namespace provider {
 namespace V2_5 {
 namespace implementation {
-
-template struct CameraProvider<LegacyCameraProviderImpl_2_5>;
 
 namespace {
 // "device@<version>/legacy/<id>"

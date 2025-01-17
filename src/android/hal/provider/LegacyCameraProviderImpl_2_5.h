@@ -56,7 +56,8 @@ using ::android::Mutex;
  * This implementation supports cameras implemented via the legacy libhardware
  * camera HAL definitions.
  */
-struct LegacyCameraProviderImpl_2_5 : public camera_module_callbacks_t {
+struct LegacyCameraProviderImpl_2_5 : public ICameraProvider,
+                                      public camera_module_callbacks_t {
     LegacyCameraProviderImpl_2_5();
     ~LegacyCameraProviderImpl_2_5();
 
