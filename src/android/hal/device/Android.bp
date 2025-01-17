@@ -1,0 +1,47 @@
+//
+// Copyright (C) 2020 The Android Open Source Project
+//
+// SPDX-License-Identifier: Apache-2.0
+//
+
+package {
+    default_team: "trendy_team_camera_framework",
+    // See: http://go/android-license-faq
+    // A large-scale-change added 'default_applicable_licenses' to import
+    // all of the 'license_kinds' from "hardware_interfaces_license"
+    // to get the below license kinds:
+    //   SPDX-license-identifier-Apache-2.0
+    default_applicable_licenses: ["Android-Apache-2.0"],
+}
+
+cc_library_shared {
+    name: "camera.device-libcamera-impl",
+    vendor: true,
+    srcs: [
+        "LibcameraDevice.cpp",
+        "LibcameraDeviceSession.cpp",
+        "convert.cpp",
+    ],
+    shared_libs: [
+        "android.hardware.camera.common-V1-ndk",
+        "android.hardware.camera.device-V1-ndk",
+        "android.hardware.graphics.allocator-V2-ndk",
+        "libbinder_ndk",
+        "libcamera_metadata",
+        "libcutils",
+        "libfmq",
+        "libhardware",
+        "libhidlbase",
+        "liblog",
+        "libsync",
+        "libui",
+        "libutils",
+    ],
+    static_libs: [
+        "android.hardware.camera.common-helper",
+        "libaidlcommonsupport",
+    ],
+    header_libs: ["media_plugin_headers"],
+    export_include_dirs: ["."],
+    defaults: ["android.hardware.graphics.common-ndk_shared"],
+}
