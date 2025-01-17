@@ -14,22 +14,12 @@
  * limitations under the License.
  */
 
-#ifdef LAZY_SERVICE
-#define LOG_TAG "LibcameraProvider-service-lazy"
-#else
-#define LOG_TAG "LibcameraProvider-service-lazy"
-#endif
+#include <android/binder_manager.h>
+#include <android/binder_process.h>
 
-#include <android/hardware/camera/provider/2.5/ICameraProvider.h>
-#include <binder/ProcessState.h>
-#include <cutils/properties.h>
-#include <hidl/LegacySupport.h>
-#include <malloc.h>
+#include "LibcameraProvider.h"
 
-using android::status_t;
-using android::hardware::defaultLazyPassthroughServiceImplementation;
-using android::hardware::defaultPassthroughServiceImplementation;
-using android::hardware::camera::provider::V2_5::ICameraProvider;
+using ::android::hardware::camera::provider::implementation::LibcameraProvider;
 
 namespace {
 // Default recommended RPC thread count for camera provider implementations
@@ -39,28 +29,24 @@ const int HWBINDER_THREAD_COUNT = 6;
 int main()
 {
     ALOGI("LibcameraProvider libcamera service is starting.");
-    // The camera HAL may communicate to other vendor components via
-    // /dev/vndbinder
-    android::ProcessState::initWithDriver("/dev/vndbinder");
 
-    // b/166675194
-    if (property_get_bool("ro.vendor.camera.provider24.disable_mem_init", false)) {
-        if (mallopt(M_BIONIC_ZERO_INIT, 0) == 0) {
-            // Note - heap initialization is only present on devices with Scudo.
-            // Devices with jemalloc don't have heap-init, and thus the mallopt
-            // will fail. On these devices, you probably just want to remove the
-            // property.
-            ALOGE("Disabling heap initialization failed.");
-        }
-    }
+    ABinderProcess_setThreadPoolMaxThreadCount(HWBINDER_THREAD_COUNT);
 
-    status_t status;
+    std::shared_ptr<LibcameraProvider> provider = ndk::SharedRefBase::make<LibcameraProvider>();
+    const std::string serviceName = std::string(LibcameraProvider::descriptor) + "/libcamera/0";
+
 #ifdef LAZY_SERVICE
-        status = defaultLazyPassthroughServiceImplementation<ICameraProvider>("libcamera/0",
-                                                                              HWBINDER_THREAD_COUNT);
+    binder_exception_t ret = AServiceManager_registerLazyService(provider->asBinder().get(),
+                                                                 serviceName.c_str());
+    LOG_ALWAYS_FATAL_IF(ret != EX_NONE,
+                        "Error while registering lazy libcamera camera provider service: %d", ret);
 #else
-        status = defaultPassthroughServiceImplementation<ICameraProvider>("libcamera/0",
-                                                                          HWBINDER_THREAD_COUNT);
+    binder_exception_t ret =
+            AServiceManager_addService(provider->asBinder().get(), serviceName.c_str());
+    LOG_ALWAYS_FATAL_IF(ret != EX_NONE,
+                        "Error while registering libcamera camera provider service: %d", ret);
 #endif
-    return status;
+
+    ABinderProcess_joinThreadPool();
+    return EXIT_FAILURE;  // should not reach
 }

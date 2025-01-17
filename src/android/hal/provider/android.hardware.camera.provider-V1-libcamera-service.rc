@@ -1,5 +1,5 @@
 service vendor.camera.provider-libcamera /vendor/bin/hw/android.hardware.camera.provider-V1-libcamera-service
-    interface android.hardware.camera.provider@2.5::ICameraProvider libcamera/0
+    interface aidl android.hardware.camera.provider.ICameraProvider/libcamera/0
     class hal
     user cameraserver
     group audio camera input drmrpc

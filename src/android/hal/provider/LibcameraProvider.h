@@ -17,13 +17,25 @@
 #ifndef ANDROID_HARDWARE_CAMERA_PROVIDER_V2_5_LEGACYCAMERAPROVIDER_H
 #define ANDROID_HARDWARE_CAMERA_PROVIDER_V2_5_LEGACYCAMERAPROVIDER_H
 
-#include <android/hardware/camera/provider/2.5/ICameraProvider.h>
-#include "hardware/camera_common.h"
-#include "utils/Mutex.h"
-#include "utils/SortedVector.h"
-
-#include "CameraModule.h"
-#include "VendorTagDescriptor.h"
+#include <SimpleThread.h>
+#include <aidl/android/hardware/camera/common/CameraDeviceStatus.h>
+#include <aidl/android/hardware/camera/common/VendorTagSection.h>
+#include <aidl/android/hardware/camera/device/ICameraDevice.h>
+#include <aidl/android/hardware/camera/provider/BnCameraProvider.h>
+#include <aidl/android/hardware/camera/provider/CameraIdAndStreamCombination.h>
+#include <aidl/android/hardware/camera/provider/ConcurrentCameraIdCombination.h>
+#include <aidl/android/hardware/camera/provider/ICameraProviderCallback.h>
+#include <hardware/camera_common.h>
+#include <CameraModule.h>
+#include <VendorTagDescriptor.h>
+#include <poll.h>
+#include <utils/Mutex.h>
+#include <utils/Thread.h>
+#include <utils/SortedVector.h>
+#include <thread>
+#include <unordered_map>
+#include <unordered_set>
+#include <map>
 
 namespace android {
 namespace hardware {
@@ -31,62 +43,54 @@ namespace camera {
 namespace provider {
 namespace implementation {
 
-using ::android::hardware::camera::common::V1_0::CameraDeviceStatus;
-using ::android::hardware::camera::common::V1_0::Status;
-using ::android::hardware::camera::common::V1_0::TorchModeStatus;
-using ::android::hardware::camera::common::V1_0::VendorTag;
-using ::android::hardware::camera::common::V1_0::VendorTagSection;
-using ::android::hardware::camera::common::V1_0::helper::CameraModule;
-using ::android::hardware::camera::common::V1_0::helper::VendorTagDescriptor;
-using ::android::hardware::camera::provider::V2_5::ICameraProvider;
-using ::android::hardware::camera::provider::V2_5::ICameraProviderCallback;
-using ::android::hardware::Return;
-using ::android::hardware::Void;
-using ::android::hardware::hidl_vec;
-using ::android::hardware::hidl_string;
-using ::android::sp;
-using ::android::Mutex;
+using ::aidl::android::hardware::camera::common::CameraDeviceStatus;
+using ::aidl::android::hardware::camera::common::VendorTagSection;
+using ::aidl::android::hardware::camera::device::ICameraDevice;
+using ::aidl::android::hardware::camera::provider::BnCameraProvider;
+using ::aidl::android::hardware::camera::provider::CameraIdAndStreamCombination;
+using ::aidl::android::hardware::camera::provider::ConcurrentCameraIdCombination;
+using ::aidl::android::hardware::camera::provider::ICameraProviderCallback;
+using ::android::hardware::camera::common::helper::SimpleThread;
+using ::android::hardware::camera::common::helper::CameraModule;
 
 /**
- * The implementation of libcamera wrapper CameraProvider 2.5, separated
- * from the HIDL interface layer to allow for implementation reuse by later
- * provider versions.
- *
  * This implementation supports cameras implemented via the legacy libhardware
  * camera HAL definitions.
  */
-struct LibcameraProvider : public ICameraProvider,
-                           public camera_module_callbacks_t {
+class LibcameraProvider : public BnCameraProvider,
+                          public camera_module_callbacks_t {
+public:
     LibcameraProvider();
-    ~LibcameraProvider();
+    ~LibcameraProvider() override;
 
     // Caller must use this method to check if CameraProvider ctor failed
     bool isInitFailed() { return mInitFailed; }
 
-    // Methods from ::android::hardware::camera::provider::V2_4::ICameraProvider follow.
-    Return<Status> setCallback(const sp<ICameraProviderCallback>& callback);
-    Return<void> getVendorTags(ICameraProvider::getVendorTags_cb _hidl_cb);
-    Return<void> getCameraIdList(ICameraProvider::getCameraIdList_cb _hidl_cb);
-    Return<void> isSetTorchModeSupported(ICameraProvider::isSetTorchModeSupported_cb _hidl_cb);
-    Return<void> getCameraDeviceInterface_V1_x(
-            const hidl_string& cameraDeviceName,
-            ICameraProvider::getCameraDeviceInterface_V1_x_cb _hidl_cb);
-    Return<void> getCameraDeviceInterface_V3_x(
-            const hidl_string& cameraDeviceName,
-            ICameraProvider::getCameraDeviceInterface_V3_x_cb _hidl_cb);
-    Return<void> notifyDeviceStateChange(hidl_bitfield<DeviceState> newState);
+    ndk::ScopedAStatus setCallback(
+            const std::shared_ptr<ICameraProviderCallback>& in_callback) override;
+    ndk::ScopedAStatus getVendorTags(std::vector<VendorTagSection>* _aidl_return) override;
+    ndk::ScopedAStatus getCameraIdList(std::vector<std::string>* _aidl_return) override;
+    ndk::ScopedAStatus getCameraDeviceInterface(
+            const std::string& in_cameraDeviceName,
+            std::shared_ptr<ICameraDevice>* _aidl_return) override;
+    ndk::ScopedAStatus notifyDeviceStateChange(int64_t in_deviceState) override;
+    ndk::ScopedAStatus getConcurrentCameraIds(
+            std::vector<ConcurrentCameraIdCombination>* _aidl_return) override;
+    ndk::ScopedAStatus isConcurrentStreamCombinationSupported(
+            const std::vector<CameraIdAndStreamCombination>& in_configs,
+            bool* _aidl_return) override;
 
 protected:
     Mutex mCbLock;
-    sp<ICameraProviderCallback> mCallbacks = nullptr;
+    std::shared_ptr<ICameraProviderCallback> mCallbacks = nullptr;
 
     sp<CameraModule> mModule;
 
     int mNumberOfLegacyCameras;
-    std::map<std::string, camera_device_status_t> mCameraStatusMap; // camera id -> status
+    std::map<std::string, CameraDeviceStatus> mCameraStatusMap; // camera id -> status
     std::map<std::string, bool> mOpenLegacySupported; // camera id -> open_legacy HAL1.0 supported
     SortedVector<std::string> mCameraIds; // the "0"/"1" libcamera camera Ids
-    // (cameraId string, hidl device name) pairs
+    // (cameraId string, aidl device name) pairs
     SortedVector<std::pair<std::string, std::string>> mCameraDeviceNames;
 
     int mPreferredHal3MinorVersion;
@@ -96,18 +100,10 @@ protected:
     bool mInitFailed;
     bool initialize();
 
-    hidl_vec<VendorTagSection> mVendorTagSections;
-    bool setUpVendorTags();
     int checkCameraVersion(int id, camera_info info);
 
     // create HIDL device name from camera ID and legacy device version
-    std::string getHidlDeviceName(std::string cameraId, int deviceVersion);
-
-    // extract libcamera camera ID/device version from a HIDL device name
-    static std::string getLegacyCameraId(const hidl_string& deviceName);
-
-    // convert conventional HAL status to HIDL Status
-    static Status getHidlStatus(int);
+    std::string getAidlDeviceName(std::string cameraId, int deviceVersion);
 
     // static callback forwarding methods
     static void sCameraDeviceStatusChange(
