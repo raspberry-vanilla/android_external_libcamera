@@ -14,16 +14,16 @@
  * limitations under the License.
  */
 
-#define LOG_TAG "CamPrvdr@2.4-legacy"
+#define LOG_TAG "CamPrvdr@2.5-legacy"
 //#define LOG_NDEBUG 0
 #include <android/log.h>
 
-#include "LegacyCameraProviderImpl_2_4.h"
+#include "LegacyCameraProviderImpl_2_5.h"
 #include "CameraDevice_1_0.h"
 #include "CameraDevice_3_3.h"
 #include "CameraDevice_3_4.h"
 #include "CameraDevice_3_5.h"
-#include "CameraProvider_2_4.h"
+#include "CameraProvider_2_5.h"
 #include <cutils/properties.h>
 #include <regex>
 #include <string.h>
@@ -33,10 +33,10 @@ namespace android {
 namespace hardware {
 namespace camera {
 namespace provider {
-namespace V2_4 {
+namespace V2_5 {
 namespace implementation {
 
-template struct CameraProvider<LegacyCameraProviderImpl_2_4>;
+template struct CameraProvider<LegacyCameraProviderImpl_2_5>;
 
 namespace {
 // "device@<version>/legacy/<id>"
@@ -67,7 +67,7 @@ bool matchDeviceName(const hidl_string& deviceName, std::string* deviceVersion,
 using ::android::hardware::camera::common::V1_0::CameraMetadataType;
 using ::android::hardware::camera::common::V1_0::Status;
 
-void LegacyCameraProviderImpl_2_4::addDeviceNames(int camera_id, CameraDeviceStatus status, bool cam_new)
+void LegacyCameraProviderImpl_2_5::addDeviceNames(int camera_id, CameraDeviceStatus status, bool cam_new)
 {
     char cameraId[kMaxCameraIdLen];
     snprintf(cameraId, sizeof(cameraId), "%d", camera_id);
@@ -107,7 +107,7 @@ void LegacyCameraProviderImpl_2_4::addDeviceNames(int camera_id, CameraDeviceSta
     }
 }
 
-void LegacyCameraProviderImpl_2_4::removeDeviceNames(int camera_id)
+void LegacyCameraProviderImpl_2_5::removeDeviceNames(int camera_id)
 {
     std::string cameraIdStr = std::to_string(camera_id);
 
@@ -134,12 +134,12 @@ void LegacyCameraProviderImpl_2_4::removeDeviceNames(int camera_id)
 /**
  * static callback forwarding methods from HAL to instance
  */
-void LegacyCameraProviderImpl_2_4::sCameraDeviceStatusChange(
+void LegacyCameraProviderImpl_2_5::sCameraDeviceStatusChange(
         const struct camera_module_callbacks* callbacks,
         int camera_id,
         int new_status) {
-    LegacyCameraProviderImpl_2_4* cp = const_cast<LegacyCameraProviderImpl_2_4*>(
-            static_cast<const LegacyCameraProviderImpl_2_4*>(callbacks));
+    LegacyCameraProviderImpl_2_5* cp = const_cast<LegacyCameraProviderImpl_2_5*>(
+            static_cast<const LegacyCameraProviderImpl_2_5*>(callbacks));
     if (cp == nullptr) {
         ALOGE("%s: callback ops is null", __FUNCTION__);
         return;
@@ -180,12 +180,12 @@ void LegacyCameraProviderImpl_2_4::sCameraDeviceStatusChange(
     }
 }
 
-void LegacyCameraProviderImpl_2_4::sTorchModeStatusChange(
+void LegacyCameraProviderImpl_2_5::sTorchModeStatusChange(
         const struct camera_module_callbacks* callbacks,
         const char* camera_id,
         int new_status) {
-    LegacyCameraProviderImpl_2_4* cp = const_cast<LegacyCameraProviderImpl_2_4*>(
-            static_cast<const LegacyCameraProviderImpl_2_4*>(callbacks));
+    LegacyCameraProviderImpl_2_5* cp = const_cast<LegacyCameraProviderImpl_2_5*>(
+            static_cast<const LegacyCameraProviderImpl_2_5*>(callbacks));
 
     if (cp == nullptr) {
         ALOGE("%s: callback ops is null", __FUNCTION__);
@@ -205,7 +205,7 @@ void LegacyCameraProviderImpl_2_4::sTorchModeStatusChange(
     }
 }
 
-Status LegacyCameraProviderImpl_2_4::getHidlStatus(int status) {
+Status LegacyCameraProviderImpl_2_5::getHidlStatus(int status) {
     switch (status) {
         case 0: return Status::OK;
         case -ENODEV: return Status::INTERNAL_ERROR;
@@ -216,13 +216,13 @@ Status LegacyCameraProviderImpl_2_4::getHidlStatus(int status) {
     }
 }
 
-std::string LegacyCameraProviderImpl_2_4::getLegacyCameraId(const hidl_string& deviceName) {
+std::string LegacyCameraProviderImpl_2_5::getLegacyCameraId(const hidl_string& deviceName) {
     std::string cameraId;
     matchDeviceName(deviceName, nullptr, &cameraId);
     return cameraId;
 }
 
-std::string LegacyCameraProviderImpl_2_4::getHidlDeviceName(
+std::string LegacyCameraProviderImpl_2_5::getHidlDeviceName(
         std::string cameraId, int deviceVersion) {
     // Maybe consider create a version check method and SortedVec to speed up?
     if (deviceVersion != CAMERA_DEVICE_API_VERSION_1_0 &&
@@ -237,7 +237,7 @@ std::string LegacyCameraProviderImpl_2_4::getHidlDeviceName(
     // Supported combinations:
     // CAMERA_DEVICE_API_VERSION_1_0 -> ICameraDevice@1.0
     // CAMERA_DEVICE_API_VERSION_3_[2-4] -> ICameraDevice@[3.2|3.3]
-    // CAMERA_DEVICE_API_VERSION_3_5 + CAMERA_MODULE_API_VERSION_2_4 -> ICameraDevice@3.4
+    // CAMERA_DEVICE_API_VERSION_3_5 + CAMERA_MODULE_API_VERSION_2_5 -> ICameraDevice@3.4
     // CAMERA_DEVICE_API_VERSION_3_[5-6] + CAMERA_MODULE_API_VERSION_2_5 -> ICameraDevice@3.5
     bool isV1 = deviceVersion == CAMERA_DEVICE_API_VERSION_1_0;
     int versionMajor = isV1 ? 1 : 3;
@@ -257,15 +257,15 @@ std::string LegacyCameraProviderImpl_2_4::getHidlDeviceName(
     return deviceName;
 }
 
-LegacyCameraProviderImpl_2_4::LegacyCameraProviderImpl_2_4() :
+LegacyCameraProviderImpl_2_5::LegacyCameraProviderImpl_2_5() :
         camera_module_callbacks_t({sCameraDeviceStatusChange,
                                    sTorchModeStatusChange}) {
     mInitFailed = initialize();
 }
 
-LegacyCameraProviderImpl_2_4::~LegacyCameraProviderImpl_2_4() {}
+LegacyCameraProviderImpl_2_5::~LegacyCameraProviderImpl_2_5() {}
 
-bool LegacyCameraProviderImpl_2_4::initialize() {
+bool LegacyCameraProviderImpl_2_5::initialize() {
     camera_module_t *rawModule;
     int err = hw_get_module(CAMERA_HARDWARE_MODULE_ID,
             (const hw_module_t **)&rawModule);
@@ -342,7 +342,7 @@ bool LegacyCameraProviderImpl_2_4::initialize() {
 /**
  * Check that the device HAL version is still in supported.
  */
-int LegacyCameraProviderImpl_2_4::checkCameraVersion(int id, camera_info info) {
+int LegacyCameraProviderImpl_2_5::checkCameraVersion(int id, camera_info info) {
     if (mModule == nullptr) {
         return NO_INIT;
     }
@@ -389,7 +389,7 @@ int LegacyCameraProviderImpl_2_4::checkCameraVersion(int id, camera_info info) {
     return OK;
 }
 
-bool LegacyCameraProviderImpl_2_4::setUpVendorTags() {
+bool LegacyCameraProviderImpl_2_5::setUpVendorTags() {
     ATRACE_CALL();
     vendor_tag_ops_t vOps = vendor_tag_ops_t();
 
@@ -445,8 +445,8 @@ bool LegacyCameraProviderImpl_2_4::setUpVendorTags() {
     return true;
 }
 
-// Methods from ::android::hardware::camera::provider::V2_4::ICameraProvider follow.
-Return<Status> LegacyCameraProviderImpl_2_4::setCallback(
+// Methods from ::android::hardware::camera::provider::V2_5::ICameraProvider follow.
+Return<Status> LegacyCameraProviderImpl_2_5::setCallback(
         const sp<ICameraProviderCallback>& callback) {
     Mutex::Autolock _l(mCbLock);
     mCallbacks = callback;
@@ -465,13 +465,13 @@ Return<Status> LegacyCameraProviderImpl_2_4::setCallback(
     return Status::OK;
 }
 
-Return<void> LegacyCameraProviderImpl_2_4::getVendorTags(
+Return<void> LegacyCameraProviderImpl_2_5::getVendorTags(
         ICameraProvider::getVendorTags_cb _hidl_cb) {
     _hidl_cb(Status::OK, mVendorTagSections);
     return Void();
 }
 
-Return<void> LegacyCameraProviderImpl_2_4::getCameraIdList(
+Return<void> LegacyCameraProviderImpl_2_5::getCameraIdList(
         ICameraProvider::getCameraIdList_cb _hidl_cb) {
     std::vector<hidl_string> deviceNameList;
     for (auto const& deviceNamePair : mCameraDeviceNames) {
@@ -489,14 +489,14 @@ Return<void> LegacyCameraProviderImpl_2_4::getCameraIdList(
     return Void();
 }
 
-Return<void> LegacyCameraProviderImpl_2_4::isSetTorchModeSupported(
+Return<void> LegacyCameraProviderImpl_2_5::isSetTorchModeSupported(
         ICameraProvider::isSetTorchModeSupported_cb _hidl_cb) {
     bool support = mModule->isSetTorchModeSupported();
     _hidl_cb (Status::OK, support);
     return Void();
 }
 
-Return<void> LegacyCameraProviderImpl_2_4::getCameraDeviceInterface_V1_x(
+Return<void> LegacyCameraProviderImpl_2_5::getCameraDeviceInterface_V1_x(
         const hidl_string& cameraDeviceName,
         ICameraProvider::getCameraDeviceInterface_V1_x_cb _hidl_cb)  {
     std::string cameraId, deviceVersion;
@@ -550,7 +550,7 @@ Return<void> LegacyCameraProviderImpl_2_4::getCameraDeviceInterface_V1_x(
     return Void();
 }
 
-Return<void> LegacyCameraProviderImpl_2_4::getCameraDeviceInterface_V3_x(
+Return<void> LegacyCameraProviderImpl_2_5::getCameraDeviceInterface_V3_x(
         const hidl_string& cameraDeviceName,
         ICameraProvider::getCameraDeviceInterface_V3_x_cb _hidl_cb)  {
     std::string cameraId, deviceVersion;
@@ -651,7 +651,7 @@ Return<void> LegacyCameraProviderImpl_2_4::getCameraDeviceInterface_V3_x(
 }
 
 } // namespace implementation
-}  // namespace V2_4
+}  // namespace V2_5
 }  // namespace provider
 }  // namespace camera
 }  // namespace hardware

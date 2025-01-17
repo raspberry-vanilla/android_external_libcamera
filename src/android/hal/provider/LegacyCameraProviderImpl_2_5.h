@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-#ifndef ANDROID_HARDWARE_CAMERA_PROVIDER_V2_4_LEGACYCAMERAPROVIDER_H
-#define ANDROID_HARDWARE_CAMERA_PROVIDER_V2_4_LEGACYCAMERAPROVIDER_H
+#ifndef ANDROID_HARDWARE_CAMERA_PROVIDER_V2_5_LEGACYCAMERAPROVIDER_H
+#define ANDROID_HARDWARE_CAMERA_PROVIDER_V2_5_LEGACYCAMERAPROVIDER_H
 
-#include <android/hardware/camera/provider/2.4/ICameraProvider.h>
+#include <android/hardware/camera/provider/2.5/ICameraProvider.h>
 #include "hardware/camera_common.h"
 #include "utils/Mutex.h"
 #include "utils/SortedVector.h"
@@ -29,7 +29,7 @@ namespace android {
 namespace hardware {
 namespace camera {
 namespace provider {
-namespace V2_4 {
+namespace V2_5 {
 namespace implementation {
 
 using ::android::hardware::camera::common::V1_0::CameraDeviceStatus;
@@ -39,8 +39,8 @@ using ::android::hardware::camera::common::V1_0::VendorTag;
 using ::android::hardware::camera::common::V1_0::VendorTagSection;
 using ::android::hardware::camera::common::V1_0::helper::CameraModule;
 using ::android::hardware::camera::common::V1_0::helper::VendorTagDescriptor;
-using ::android::hardware::camera::provider::V2_4::ICameraProvider;
-using ::android::hardware::camera::provider::V2_4::ICameraProviderCallback;
+using ::android::hardware::camera::provider::V2_5::ICameraProvider;
+using ::android::hardware::camera::provider::V2_5::ICameraProviderCallback;
 using ::android::hardware::Return;
 using ::android::hardware::Void;
 using ::android::hardware::hidl_vec;
@@ -49,16 +49,16 @@ using ::android::sp;
 using ::android::Mutex;
 
 /**
- * The implementation of legacy wrapper CameraProvider 2.4, separated
+ * The implementation of legacy wrapper CameraProvider 2.5, separated
  * from the HIDL interface layer to allow for implementation reuse by later
  * provider versions.
  *
  * This implementation supports cameras implemented via the legacy libhardware
  * camera HAL definitions.
  */
-struct LegacyCameraProviderImpl_2_4 : public camera_module_callbacks_t {
-    LegacyCameraProviderImpl_2_4();
-    ~LegacyCameraProviderImpl_2_4();
+struct LegacyCameraProviderImpl_2_5 : public camera_module_callbacks_t {
+    LegacyCameraProviderImpl_2_5();
+    ~LegacyCameraProviderImpl_2_5();
 
     // Caller must use this method to check if CameraProvider ctor failed
     bool isInitFailed() { return mInitFailed; }
@@ -125,10 +125,10 @@ protected:
 };
 
 }  // namespace implementation
-}  // namespace V2_4
+}  // namespace V2_5
 }  // namespace provider
 }  // namespace camera
 }  // namespace hardware
 }  // namespace android
 
-#endif  // ANDROID_HARDWARE_CAMERA_PROVIDER_V2_4_LEGACYCAMERAPROVIDER_H
+#endif  // ANDROID_HARDWARE_CAMERA_PROVIDER_V2_5_LEGACYCAMERAPROVIDER_H

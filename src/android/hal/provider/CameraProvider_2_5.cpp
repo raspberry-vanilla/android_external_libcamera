@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-#include "CameraProvider_2_4.h"
-#include "LegacyCameraProviderImpl_2_4.h"
-#include "ExternalCameraProviderImpl_2_4.h"
+#include "CameraProvider_2_5.h"
+#include "LegacyCameraProviderImpl_2_5.h"
+#include "ExternalCameraProviderImpl_2_5.h"
 
 const char *kLegacyProviderName = "legacy/0";
 const char *kExternalProviderName = "external/0";
@@ -25,10 +25,10 @@ namespace android {
 namespace hardware {
 namespace camera {
 namespace provider {
-namespace V2_4 {
+namespace V2_5 {
 namespace implementation {
 
-using android::hardware::camera::provider::V2_4::ICameraProvider;
+using android::hardware::camera::provider::V2_5::ICameraProvider;
 
 extern "C" ICameraProvider* HIDL_FETCH_ICameraProvider(const char* name);
 
@@ -48,12 +48,12 @@ CameraProvider<IMPL>* getProviderImpl() {
 }
 
 ICameraProvider* HIDL_FETCH_ICameraProvider(const char* name) {
-    using namespace android::hardware::camera::provider::V2_4::implementation;
+    using namespace android::hardware::camera::provider::V2_5::implementation;
     ICameraProvider* provider = nullptr;
     if (strcmp(name, kLegacyProviderName) == 0) {
-        provider = getProviderImpl<LegacyCameraProviderImpl_2_4>();
+        provider = getProviderImpl<LegacyCameraProviderImpl_2_5>();
     } else if (strcmp(name, kExternalProviderName) == 0) {
-        provider = getProviderImpl<ExternalCameraProviderImpl_2_4>();
+        provider = getProviderImpl<ExternalCameraProviderImpl_2_5>();
     } else {
         ALOGE("%s: unknown instance name: %s", __FUNCTION__, name);
     }
@@ -62,7 +62,7 @@ ICameraProvider* HIDL_FETCH_ICameraProvider(const char* name) {
 }
 
 }  // namespace implementation
-}  // namespace V2_4
+}  // namespace V2_5
 }  // namespace provider
 }  // namespace camera
 }  // namespace hardware

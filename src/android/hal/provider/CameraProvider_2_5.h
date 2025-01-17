@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-#ifndef ANDROID_HARDWARE_CAMERA_PROVIDER_V2_4_CAMERAPROVIDER_H
-#define ANDROID_HARDWARE_CAMERA_PROVIDER_V2_4_CAMERAPROVIDER_H
+#ifndef ANDROID_HARDWARE_CAMERA_PROVIDER_V2_5_CAMERAPROVIDER_H
+#define ANDROID_HARDWARE_CAMERA_PROVIDER_V2_5_CAMERAPROVIDER_H
 
-#include <android/hardware/camera/provider/2.4/ICameraProvider.h>
+#include <android/hardware/camera/provider/2.5/ICameraProvider.h>
 #include <hidl/Status.h>
 #include <hidl/MQDescriptor.h>
 
@@ -25,12 +25,12 @@ namespace android {
 namespace hardware {
 namespace camera {
 namespace provider {
-namespace V2_4 {
+namespace V2_5 {
 namespace implementation {
 
 using ::android::hardware::camera::common::V1_0::Status;
-using ::android::hardware::camera::provider::V2_4::ICameraProvider;
-using ::android::hardware::camera::provider::V2_4::ICameraProviderCallback;
+using ::android::hardware::camera::provider::V2_5::ICameraProvider;
+using ::android::hardware::camera::provider::V2_5::ICameraProviderCallback;
 using ::android::hardware::Return;
 using ::android::hardware::hidl_string;
 using ::android::sp;
@@ -77,10 +77,10 @@ private:
 };
 
 }  // namespace implementation
-}  // namespace V2_4
+}  // namespace V2_5
 }  // namespace provider
 }  // namespace camera
 }  // namespace hardware
 }  // namespace android
 
-#endif  // ANDROID_HARDWARE_CAMERA_PROVIDER_V2_4_CAMERAPROVIDER_H
+#endif  // ANDROID_HARDWARE_CAMERA_PROVIDER_V2_5_CAMERAPROVIDER_H
