@@ -31,11 +31,16 @@ using android::hardware::defaultLazyPassthroughServiceImplementation;
 using android::hardware::defaultPassthroughServiceImplementation;
 using android::hardware::camera::provider::V2_5::ICameraProvider;
 
+namespace {
 #ifdef LAZY_SERVICE
 const bool kLazyService = true;
 #else
 const bool kLazyService = false;
 #endif
+
+// Default recommended RPC thread count for camera provider implementations
+const int HWBINDER_THREAD_COUNT = 6;
+}  // namespace
 
 int main()
 {
@@ -58,10 +63,10 @@ int main()
     status_t status;
     if (kLazyService) {
         status = defaultLazyPassthroughServiceImplementation<ICameraProvider>("libcamera/0",
-                                                                              /*maxThreads*/ 6);
+                                                                              HWBINDER_THREAD_COUNT);
     } else {
         status = defaultPassthroughServiceImplementation<ICameraProvider>("libcamera/0",
-                                                                          /*maxThreads*/ 6);
+                                                                          HWBINDER_THREAD_COUNT);
     }
     return status;
 }
