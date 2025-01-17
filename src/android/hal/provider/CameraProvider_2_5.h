@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016 The Android Open Source Project
+ * Copyright (C) 2019 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -70,6 +70,11 @@ struct CameraProvider : public ICameraProvider {
             const hidl_string& cameraDeviceName,
             getCameraDeviceInterface_V3_x_cb _hidl_cb) override {
         return impl.getCameraDeviceInterface_V3_x(cameraDeviceName, _hidl_cb);
+    }
+
+    // Methods from ::android::hardware::camera::provider::V2_5::ICameraProvider follow.
+    Return<void> notifyDeviceStateChange(hardware::hidl_bitfield<DeviceState> newState) override {
+        return impl.notifyDeviceStateChange(newState);
     }
 
 private:

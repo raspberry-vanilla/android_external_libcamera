@@ -74,6 +74,7 @@ struct LegacyCameraProviderImpl_2_5 : public camera_module_callbacks_t {
     Return<void> getCameraDeviceInterface_V3_x(
             const hidl_string& cameraDeviceName,
             ICameraProvider::getCameraDeviceInterface_V3_x_cb _hidl_cb);
+    Return<void> notifyDeviceStateChange(hidl_bitfield<DeviceState> newState);
 
 protected:
     Mutex mCbLock;

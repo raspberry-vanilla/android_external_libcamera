@@ -650,6 +650,14 @@ Return<void> LegacyCameraProviderImpl_2_5::getCameraDeviceInterface_V3_x(
     return Void();
 }
 
+Return<void> LegacyCameraProviderImpl_2_5::notifyDeviceStateChange(
+        hidl_bitfield<DeviceState> newState) {
+    ALOGD("%s: New device state: 0x%" PRIx64, __FUNCTION__, newState);
+    uint64_t state = static_cast<uint64_t>(newState);
+    mModule->notifyDeviceStateChange(state);
+    return Void();
+}
+
 } // namespace implementation
 }  // namespace V2_5
 }  // namespace provider
