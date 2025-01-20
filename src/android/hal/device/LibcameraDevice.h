@@ -17,11 +17,13 @@
 
 #pragma once
 
+#include <aidl/android/hardware/camera/common/Status.h>
 #include <aidl/android/hardware/camera/device/BnCameraDevice.h>
 
 #include <CameraModule.h>
 
 #include <map>
+#include <memory>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -32,6 +34,7 @@ namespace device {
 namespace implementation {
 
 using ::aidl::android::hardware::camera::common::CameraResourceCost;
+using ::aidl::android::hardware::camera::common::Status;
 using ::aidl::android::hardware::camera::device::BnCameraDevice;
 using ::aidl::android::hardware::camera::device::CameraMetadata;
 using ::aidl::android::hardware::camera::device::ICameraDeviceCallback;
@@ -71,7 +74,20 @@ public:
     ndk::ScopedAStatus getTorchStrengthLevel(int32_t* _aidl_return) override;
 
     // Caller must use this method to check if CameraDevice ctor failed
-    bool isInitFailed() { return false; /* STUB: to update */ }
+    bool isInitFailed() { return mInitFail; }
+
+private:
+    sp<CameraModule> mModule;
+    std::string mCameraId;
+    // const after ctor
+    int mCameraIdInt;
+    int mDeviceVersion;
+    bool mInitFail = false;
+
+    // gating access to mSession
+    mutable Mutex mLock;
+
+    Status initStatus() const;
 };
 
 }  // namespace implementation

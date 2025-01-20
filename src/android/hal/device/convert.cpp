@@ -35,6 +35,20 @@ using ::aidl::android::hardware::camera::device::ShutterMsg;
 using ::aidl::android::hardware::graphics::common::BufferUsage;
 using ::aidl::android::hardware::graphics::common::PixelFormat;
 
+Status getAidlStatus(int status) {
+    switch (status) {
+        case 0: return Status::OK;
+        case -ENOSYS: return Status::OPERATION_NOT_SUPPORTED;
+        case -EBUSY : return Status::CAMERA_IN_USE;
+        case -EUSERS: return Status::MAX_CAMERAS_IN_USE;
+        case -ENODEV: return Status::INTERNAL_ERROR;
+        case -EINVAL: return Status::ILLEGAL_ARGUMENT;
+        default:
+            ALOGE("%s: unknown HAL status code %d", __FUNCTION__, status);
+            return Status::INTERNAL_ERROR;
+    }
+}
+
 void convertToAidl(const camera_metadata_t* src, CameraMetadata* dest) {
     if (src == nullptr) {
         return;
@@ -62,6 +76,17 @@ bool convertFromAidl(const CameraMetadata& src, const camera_metadata_t** dst) {
     }
     *dst = (camera_metadata_t*)data;
     return true;
+}
+
+void convertFromAidl(const Stream& src, camera_stream_t* dst) {
+    dst->stream_type = static_cast<int>(src.streamType);
+    dst->width = src.width;
+    dst->height = src.height;
+    dst->format = static_cast<int>(src.format);
+    dst->data_space = static_cast<android_dataspace_t>(src.dataSpace);
+    dst->usage = static_cast<uint32_t>(src.usage);
+    dst->physical_camera_id = src.physicalCameraId.c_str();
+    dst->rotation = static_cast<int>(src.rotation);
 }
 
 }  // namespace implementation

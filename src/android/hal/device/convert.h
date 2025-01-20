@@ -39,9 +39,14 @@ using ::aidl::android::hardware::camera::device::HalStream;
 using ::aidl::android::hardware::camera::device::NotifyMsg;
 using ::aidl::android::hardware::camera::device::Stream;
 
+// convert conventional HAL status to AIDL Status
+Status getAidlStatus(int);
+
 void convertToAidl(const camera_metadata_t* src, CameraMetadata* dest);
 
 bool convertFromAidl(const CameraMetadata& src, const camera_metadata_t** dst);
+
+void convertFromAidl(const Stream &src, camera_stream_t* dst);
 
 inline ndk::ScopedAStatus fromStatus(Status status) {
     return status == Status::OK
