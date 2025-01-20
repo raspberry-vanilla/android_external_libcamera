@@ -28,10 +28,10 @@ cc_library_shared {
     name: "camera.device-libcamera-impl",
     defaults: [
         "android.hardware.graphics.common-ndk_shared",
-        "hidl_defaults",
     ],
     proprietary: true,
     srcs: [
+        "LibcameraDevice.cpp",
         "convert.cpp",
     ],
     shared_libs: [
