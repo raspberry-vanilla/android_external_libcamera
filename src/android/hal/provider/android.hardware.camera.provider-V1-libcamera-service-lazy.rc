@@ -8,3 +8,5 @@ service vendor.camera.provider-libcamera /vendor/bin/hw/android.hardware.camera.
     ioprio rt 4
     capabilities SYS_NICE
     task_profiles CameraServiceCapacity MaxPerformance
+    setenv LIBCAMERA_LOG_LEVELS *:WARN
+    setenv LIBCAMERA_LOG_FILE syslog
