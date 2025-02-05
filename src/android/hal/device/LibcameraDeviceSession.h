@@ -84,12 +84,6 @@ struct LibcameraDeviceSession : public virtual RefBase, protected camera3_callba
     void disconnect();
     bool isClosed();
 
-    // Retrieve the HIDL interface, split into its own class to avoid inheritance issues when
-    // dealing with minor version revs and simultaneous implementation and interface inheritance
-    virtual sp<ICameraDeviceSession> getInterface() {
-        return new TrampolineSessionInterface_3_2(this);
-    }
-
 protected:
 
     // Methods from ::android::hardware::camera::device::V3_2::ICameraDeviceSession follow
@@ -362,52 +356,6 @@ protected:
             bool handlePhysCam);
     static bool sShouldShrink(const camera_metadata_t* md);
     static camera_metadata_t* sCreateCompactCopy(const camera_metadata_t* src);
-
-private:
-
-    struct TrampolineSessionInterface_3_2 : public ICameraDeviceSession {
-        TrampolineSessionInterface_3_2(sp<LibcameraDeviceSession> parent) :
-                mParent(parent) {}
-
-        virtual Return<void> constructDefaultRequestSettings(
-                V3_2::RequestTemplate type,
-                V3_2::ICameraDeviceSession::constructDefaultRequestSettings_cb _hidl_cb) override {
-            return mParent->constructDefaultRequestSettings(type, _hidl_cb);
-        }
-
-        virtual Return<void> configureStreams(
-                const V3_2::StreamConfiguration& requestedConfiguration,
-                V3_2::ICameraDeviceSession::configureStreams_cb _hidl_cb) override {
-            return mParent->configureStreams(requestedConfiguration, _hidl_cb);
-        }
-
-        virtual Return<void> processCaptureRequest(const hidl_vec<V3_2::CaptureRequest>& requests,
-                const hidl_vec<V3_2::BufferCache>& cachesToRemove,
-                V3_2::ICameraDeviceSession::processCaptureRequest_cb _hidl_cb) override {
-            return mParent->processCaptureRequest(requests, cachesToRemove, _hidl_cb);
-        }
-
-        virtual Return<void> getCaptureRequestMetadataQueue(
-                V3_2::ICameraDeviceSession::getCaptureRequestMetadataQueue_cb _hidl_cb) override  {
-            return mParent->getCaptureRequestMetadataQueue(_hidl_cb);
-        }
-
-        virtual Return<void> getCaptureResultMetadataQueue(
-                V3_2::ICameraDeviceSession::getCaptureResultMetadataQueue_cb _hidl_cb) override  {
-            return mParent->getCaptureResultMetadataQueue(_hidl_cb);
-        }
-
-        virtual Return<Status> flush() override {
-            return mParent->flush();
-        }
-
-        virtual Return<void> close() override {
-            return mParent->close();
-        }
-
-    private:
-        sp<LibcameraDeviceSession> mParent;
-    };
 };
 
 }  // namespace implementation
