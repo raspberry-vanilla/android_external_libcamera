@@ -32,7 +32,7 @@ cc_library_shared {
     proprietary: true,
     srcs: [
         "LibcameraDevice.cpp",
-        "CameraDeviceSession.cpp",
+        "LibcameraDeviceSession.cpp",
         "convert.cpp",
     ],
     shared_libs: [

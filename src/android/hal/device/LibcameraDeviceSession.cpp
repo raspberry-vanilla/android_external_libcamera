@@ -22,7 +22,7 @@
 #include <utils/Trace.h>
 #include <hardware/gralloc.h>
 #include <hardware/gralloc1.h>
-#include "CameraDeviceSession.h"
+#include "LibcameraDeviceSession.h"
 
 namespace android {
 namespace hardware {
@@ -43,12 +43,12 @@ static constexpr int32_t CAMERA_RESULT_METADATA_QUEUE_SIZE  = 1 << 20 /* 1MB */;
 static constexpr int METADATA_SHRINK_ABS_THRESHOLD = 4096;
 static constexpr int METADATA_SHRINK_REL_THRESHOLD = 2;
 
-HandleImporter CameraDeviceSession::sHandleImporter;
-buffer_handle_t CameraDeviceSession::sEmptyBuffer = nullptr;
+HandleImporter LibcameraDeviceSession::sHandleImporter;
+buffer_handle_t LibcameraDeviceSession::sEmptyBuffer = nullptr;
 
-const int CameraDeviceSession::ResultBatcher::NOT_BATCHED;
+const int LibcameraDeviceSession::ResultBatcher::NOT_BATCHED;
 
-CameraDeviceSession::CameraDeviceSession(
+LibcameraDeviceSession::LibcameraDeviceSession(
     camera3_device_t* device,
     const camera_metadata_t* deviceInfo,
     const sp<ICameraDeviceCallback>& callback) :
@@ -85,7 +85,7 @@ CameraDeviceSession::CameraDeviceSession(
     mInitFail = initialize();
 }
 
-bool CameraDeviceSession::initialize() {
+bool LibcameraDeviceSession::initialize() {
     /** Initialize device with callback functions */
     ATRACE_BEGIN("camera3->initialize");
     status_t res = mDevice->ops->initialize(mDevice, this);
@@ -151,23 +151,23 @@ bool CameraDeviceSession::initialize() {
     return false;
 }
 
-bool CameraDeviceSession::shouldFreeBufEarly() {
+bool LibcameraDeviceSession::shouldFreeBufEarly() {
     return property_get_bool("ro.vendor.camera.free_buf_early", 0) == 1;
 }
 
-CameraDeviceSession::~CameraDeviceSession() {
+LibcameraDeviceSession::~LibcameraDeviceSession() {
     if (!isClosed()) {
-        ALOGE("CameraDeviceSession deleted before close!");
+        ALOGE("LibcameraDeviceSession deleted before close!");
         close();
     }
 }
 
-bool CameraDeviceSession::isClosed() {
+bool LibcameraDeviceSession::isClosed() {
     Mutex::Autolock _l(mStateLock);
     return mClosed;
 }
 
-Status CameraDeviceSession::initStatus() const {
+Status LibcameraDeviceSession::initStatus() const {
     Mutex::Autolock _l(mStateLock);
     Status status = Status::OK;
     if (mInitFail) {
@@ -180,7 +180,7 @@ Status CameraDeviceSession::initStatus() const {
     return status;
 }
 
-void CameraDeviceSession::disconnect() {
+void LibcameraDeviceSession::disconnect() {
     Mutex::Autolock _l(mStateLock);
     mDisconnected = true;
     ALOGW("%s: Camera device is disconnected. Closing.", __FUNCTION__);
@@ -190,7 +190,7 @@ void CameraDeviceSession::disconnect() {
     }
 }
 
-void CameraDeviceSession::dumpState(const native_handle_t* fd) {
+void LibcameraDeviceSession::dumpState(const native_handle_t* fd) {
     if (!isClosed()) {
         mDevice->ops->dump(mDevice, fd->data[0]);
     }
@@ -203,7 +203,7 @@ void CameraDeviceSession::dumpState(const native_handle_t* fd) {
  * AE_PRECAPTURE_TRIGGER_CANCEL to AE_PRECAPTURE_TRIGGER_IDLE but doesn't add AE_LOCK_ON to the
  * request.
  */
-bool CameraDeviceSession::handleAePrecaptureCancelRequestLocked(
+bool LibcameraDeviceSession::handleAePrecaptureCancelRequestLocked(
         const camera3_capture_request_t &halRequest,
         ::android::hardware::camera::common::V1_0::helper::CameraMetadata *settings /*out*/,
          AETriggerCancelOverride *override /*out*/) {
@@ -250,7 +250,7 @@ bool CameraDeviceSession::handleAePrecaptureCancelRequestLocked(
  * Override result metadata for cancelling AE precapture trigger applied in
  * handleAePrecaptureCancelRequestLocked().
  */
-void CameraDeviceSession::overrideResultForPrecaptureCancelLocked(
+void LibcameraDeviceSession::overrideResultForPrecaptureCancelLocked(
         const AETriggerCancelOverride &aeTriggerCancelOverride,
         ::android::hardware::camera::common::V1_0::helper::CameraMetadata *settings /*out*/) {
     if (aeTriggerCancelOverride.applyAeLock) {
@@ -267,7 +267,7 @@ void CameraDeviceSession::overrideResultForPrecaptureCancelLocked(
     }
 }
 
-Status CameraDeviceSession::importBuffer(int32_t streamId,
+Status LibcameraDeviceSession::importBuffer(int32_t streamId,
         uint64_t bufId, buffer_handle_t buf,
         /*out*/buffer_handle_t** outBufPtr,
         bool allowEmptyBuf) {
@@ -299,14 +299,14 @@ Status CameraDeviceSession::importBuffer(int32_t streamId,
     return Status::OK;
 }
 
-Status CameraDeviceSession::importRequest(
+Status LibcameraDeviceSession::importRequest(
         const CaptureRequest& request,
         hidl_vec<buffer_handle_t*>& allBufPtrs,
         hidl_vec<int>& allFences) {
     return importRequestImpl(request, allBufPtrs, allFences);
 }
 
-Status CameraDeviceSession::importRequestImpl(
+Status LibcameraDeviceSession::importRequestImpl(
         const CaptureRequest& request,
         hidl_vec<buffer_handle_t*>& allBufPtrs,
         hidl_vec<int>& allFences,
@@ -371,17 +371,17 @@ Status CameraDeviceSession::importRequestImpl(
     return Status::OK;
 }
 
-void CameraDeviceSession::cleanupInflightFences(
+void LibcameraDeviceSession::cleanupInflightFences(
         hidl_vec<int>& allFences, size_t numFences) {
     for (size_t j = 0; j < numFences; j++) {
         sHandleImporter.closeFence(allFences[j]);
     }
 }
 
-CameraDeviceSession::ResultBatcher::ResultBatcher(
+LibcameraDeviceSession::ResultBatcher::ResultBatcher(
         const sp<ICameraDeviceCallback>& callback) : mCallback(callback) {};
 
-bool CameraDeviceSession::ResultBatcher::InflightBatch::allDelivered() const {
+bool LibcameraDeviceSession::ResultBatcher::InflightBatch::allDelivered() const {
     if (!mShutterDelivered) return false;
 
     if (mPartialResultProgress < mNumPartialResults) {
@@ -396,24 +396,24 @@ bool CameraDeviceSession::ResultBatcher::InflightBatch::allDelivered() const {
     return true;
 }
 
-void CameraDeviceSession::ResultBatcher::setNumPartialResults(uint32_t n) {
+void LibcameraDeviceSession::ResultBatcher::setNumPartialResults(uint32_t n) {
     Mutex::Autolock _l(mLock);
     mNumPartialResults = n;
 }
 
-void CameraDeviceSession::ResultBatcher::setBatchedStreams(
+void LibcameraDeviceSession::ResultBatcher::setBatchedStreams(
         const std::vector<int>& streamsToBatch) {
     Mutex::Autolock _l(mLock);
     mStreamsToBatch = streamsToBatch;
 }
 
-void CameraDeviceSession::ResultBatcher::setResultMetadataQueue(
+void LibcameraDeviceSession::ResultBatcher::setResultMetadataQueue(
         std::shared_ptr<ResultMetadataQueue> q) {
     Mutex::Autolock _l(mLock);
     mResultMetadataQueue = q;
 }
 
-void CameraDeviceSession::ResultBatcher::registerBatch(uint32_t frameNumber, uint32_t batchSize) {
+void LibcameraDeviceSession::ResultBatcher::registerBatch(uint32_t frameNumber, uint32_t batchSize) {
     auto batch = std::make_shared<InflightBatch>();
     batch->mFirstFrame = frameNumber;
     batch->mBatchSize = batchSize;
@@ -426,8 +426,8 @@ void CameraDeviceSession::ResultBatcher::registerBatch(uint32_t frameNumber, uin
     mInflightBatches.push_back(batch);
 }
 
-std::pair<int, std::shared_ptr<CameraDeviceSession::ResultBatcher::InflightBatch>>
-CameraDeviceSession::ResultBatcher::getBatch(
+std::pair<int, std::shared_ptr<LibcameraDeviceSession::ResultBatcher::InflightBatch>>
+LibcameraDeviceSession::ResultBatcher::getBatch(
         uint32_t frameNumber) {
     Mutex::Autolock _l(mLock);
     int numBatches = mInflightBatches.size();
@@ -448,7 +448,7 @@ CameraDeviceSession::ResultBatcher::getBatch(
     return std::make_pair(NOT_BATCHED, nullptr);
 }
 
-void CameraDeviceSession::ResultBatcher::checkAndRemoveFirstBatch() {
+void LibcameraDeviceSession::ResultBatcher::checkAndRemoveFirstBatch() {
     Mutex::Autolock _l(mLock);
     if (mInflightBatches.size() > 0) {
         std::shared_ptr<InflightBatch> batch = mInflightBatches[0];
@@ -466,7 +466,7 @@ void CameraDeviceSession::ResultBatcher::checkAndRemoveFirstBatch() {
     }
 }
 
-void CameraDeviceSession::ResultBatcher::sendBatchShutterCbsLocked(
+void LibcameraDeviceSession::ResultBatcher::sendBatchShutterCbsLocked(
         std::shared_ptr<InflightBatch> batch) {
     if (batch->mShutterDelivered) {
         ALOGW("%s: batch shutter callback already sent!", __FUNCTION__);
@@ -482,7 +482,7 @@ void CameraDeviceSession::ResultBatcher::sendBatchShutterCbsLocked(
     batch->mShutterMsgs.clear();
 }
 
-void CameraDeviceSession::ResultBatcher::freeReleaseFences(hidl_vec<CaptureResult>& results) {
+void LibcameraDeviceSession::ResultBatcher::freeReleaseFences(hidl_vec<CaptureResult>& results) {
     for (auto& result : results) {
         if (result.inputBuffer.releaseFence.getNativeHandle() != nullptr) {
             native_handle_t* handle = const_cast<native_handle_t*>(
@@ -502,7 +502,7 @@ void CameraDeviceSession::ResultBatcher::freeReleaseFences(hidl_vec<CaptureResul
     return;
 }
 
-void CameraDeviceSession::ResultBatcher::moveStreamBuffer(StreamBuffer&& src, StreamBuffer& dst) {
+void LibcameraDeviceSession::ResultBatcher::moveStreamBuffer(StreamBuffer&& src, StreamBuffer& dst) {
     // Only dealing with releaseFence here. Assume buffer/acquireFence are null
     const native_handle_t* handle = src.releaseFence.getNativeHandle();
     src.releaseFence = nullptr;
@@ -513,7 +513,7 @@ void CameraDeviceSession::ResultBatcher::moveStreamBuffer(StreamBuffer&& src, St
     }
 }
 
-void CameraDeviceSession::ResultBatcher::pushStreamBuffer(
+void LibcameraDeviceSession::ResultBatcher::pushStreamBuffer(
         StreamBuffer&& src, std::vector<StreamBuffer>& dst) {
     // Only dealing with releaseFence here. Assume buffer/acquireFence are null
     const native_handle_t* handle = src.releaseFence.getNativeHandle();
@@ -525,12 +525,12 @@ void CameraDeviceSession::ResultBatcher::pushStreamBuffer(
     }
 }
 
-void CameraDeviceSession::ResultBatcher::sendBatchBuffersLocked(
+void LibcameraDeviceSession::ResultBatcher::sendBatchBuffersLocked(
         std::shared_ptr<InflightBatch> batch) {
     sendBatchBuffersLocked(batch, mStreamsToBatch);
 }
 
-void CameraDeviceSession::ResultBatcher::sendBatchBuffersLocked(
+void LibcameraDeviceSession::ResultBatcher::sendBatchBuffersLocked(
         std::shared_ptr<InflightBatch> batch, const std::vector<int>& streams) {
     size_t batchSize = 0;
     for (int streamId : streams) {
@@ -607,7 +607,7 @@ void CameraDeviceSession::ResultBatcher::sendBatchBuffersLocked(
     }
 }
 
-void CameraDeviceSession::ResultBatcher::sendBatchMetadataLocked(
+void LibcameraDeviceSession::ResultBatcher::sendBatchMetadataLocked(
     std::shared_ptr<InflightBatch> batch, uint32_t lastPartialResultIdx) {
     if (lastPartialResultIdx <= batch->mPartialResultProgress) {
         // Result has been delivered. Return
@@ -646,7 +646,7 @@ void CameraDeviceSession::ResultBatcher::sendBatchMetadataLocked(
     }
 }
 
-void CameraDeviceSession::ResultBatcher::notifySingleMsg(NotifyMsg& msg) {
+void LibcameraDeviceSession::ResultBatcher::notifySingleMsg(NotifyMsg& msg) {
     auto ret = mCallback->notify({msg});
     if (!ret.isOk()) {
         ALOGE("%s: notify transaction failed: %s",
@@ -655,7 +655,7 @@ void CameraDeviceSession::ResultBatcher::notifySingleMsg(NotifyMsg& msg) {
     return;
 }
 
-void CameraDeviceSession::ResultBatcher::notify(NotifyMsg& msg) {
+void LibcameraDeviceSession::ResultBatcher::notify(NotifyMsg& msg) {
     uint32_t frameNumber;
     if (CC_LIKELY(msg.type == MsgType::SHUTTER)) {
         frameNumber = msg.msg.shutter.frameNumber;
@@ -716,7 +716,7 @@ void CameraDeviceSession::ResultBatcher::notify(NotifyMsg& msg) {
     }
 }
 
-void CameraDeviceSession::ResultBatcher::invokeProcessCaptureResultCallback(
+void LibcameraDeviceSession::ResultBatcher::invokeProcessCaptureResultCallback(
         hidl_vec<CaptureResult> &results, bool tryWriteFmq) {
     if (mProcessCaptureResultLock.tryLock() != OK) {
         ALOGV("%s: previous call is not finished! waiting 1s...", __FUNCTION__);
@@ -750,7 +750,7 @@ void CameraDeviceSession::ResultBatcher::invokeProcessCaptureResultCallback(
     mProcessCaptureResultLock.unlock();
 }
 
-void CameraDeviceSession::ResultBatcher::processOneCaptureResult(CaptureResult& result) {
+void LibcameraDeviceSession::ResultBatcher::processOneCaptureResult(CaptureResult& result) {
     hidl_vec<CaptureResult> results;
     results.resize(1);
     results[0] = std::move(result);
@@ -759,7 +759,7 @@ void CameraDeviceSession::ResultBatcher::processOneCaptureResult(CaptureResult& 
     return;
 }
 
-void CameraDeviceSession::ResultBatcher::processCaptureResult(CaptureResult& result) {
+void LibcameraDeviceSession::ResultBatcher::processCaptureResult(CaptureResult& result) {
     auto pair = getBatch(result.frameNumber);
     int batchIdx = pair.first;
     if (batchIdx == NOT_BATCHED) {
@@ -832,7 +832,7 @@ void CameraDeviceSession::ResultBatcher::processCaptureResult(CaptureResult& res
 }
 
 // Methods from ::android::hardware::camera::device::V3_2::ICameraDeviceSession follow.
-Return<void> CameraDeviceSession::constructDefaultRequestSettings(
+Return<void> LibcameraDeviceSession::constructDefaultRequestSettings(
         RequestTemplate type, ICameraDeviceSession::constructDefaultRequestSettings_cb _hidl_cb)  {
     CameraMetadata outMetadata;
     Status status = constructDefaultRequestSettingsRaw( (int) type, &outMetadata);
@@ -840,7 +840,7 @@ Return<void> CameraDeviceSession::constructDefaultRequestSettings(
     return Void();
 }
 
-Status CameraDeviceSession::constructDefaultRequestSettingsRaw(int type, CameraMetadata *outMetadata) {
+Status LibcameraDeviceSession::constructDefaultRequestSettingsRaw(int type, CameraMetadata *outMetadata) {
     Status status = initStatus();
     const camera_metadata_t *rawRequest;
     if (status == Status::OK) {
@@ -877,7 +877,7 @@ Status CameraDeviceSession::constructDefaultRequestSettingsRaw(int type, CameraM
  *
  * Only map where correspondences exist, and otherwise preserve the value.
  */
-android_dataspace CameraDeviceSession::mapToLegacyDataspace(
+android_dataspace LibcameraDeviceSession::mapToLegacyDataspace(
         android_dataspace dataSpace) const {
     if (mDeviceVersion <= CAMERA_DEVICE_API_VERSION_3_3) {
         switch (dataSpace) {
@@ -901,7 +901,7 @@ android_dataspace CameraDeviceSession::mapToLegacyDataspace(
    return dataSpace;
 }
 
-bool CameraDeviceSession::preProcessConfigurationLocked(
+bool LibcameraDeviceSession::preProcessConfigurationLocked(
         const StreamConfiguration& requestedConfiguration,
         camera3_stream_configuration_t *stream_list /*out*/,
         hidl_vec<camera3_stream_t*> *streams /*out*/) {
@@ -965,7 +965,7 @@ bool CameraDeviceSession::preProcessConfigurationLocked(
     return true;
 }
 
-void CameraDeviceSession::postProcessConfigurationLocked(
+void LibcameraDeviceSession::postProcessConfigurationLocked(
         const StreamConfiguration& requestedConfiguration) {
     // delete unused streams, note we do this after adding new streams to ensure new stream
     // will not have the same address as deleted stream, and HAL has a chance to reference
@@ -1005,7 +1005,7 @@ void CameraDeviceSession::postProcessConfigurationLocked(
 }
 
 
-void CameraDeviceSession::postProcessConfigurationFailureLocked(
+void LibcameraDeviceSession::postProcessConfigurationFailureLocked(
         const StreamConfiguration& requestedConfiguration) {
     if (mFreeBufEarly) {
         // Re-build the buf cache entry for deleted streams
@@ -1025,7 +1025,7 @@ void CameraDeviceSession::postProcessConfigurationFailureLocked(
     }
 }
 
-Return<void> CameraDeviceSession::configureStreams(
+Return<void> LibcameraDeviceSession::configureStreams(
         const StreamConfiguration& requestedConfiguration,
         ICameraDeviceSession::configureStreams_cb _hidl_cb)  {
     Status status = initStatus();
@@ -1095,7 +1095,7 @@ Return<void> CameraDeviceSession::configureStreams(
 }
 
 // Needs to get called after acquiring 'mInflightLock'
-void CameraDeviceSession::cleanupBuffersLocked(int id) {
+void LibcameraDeviceSession::cleanupBuffersLocked(int id) {
     for (auto& pair : mCirculatingBuffers.at(id)) {
         sHandleImporter.freeBuffer(pair.second);
     }
@@ -1103,7 +1103,7 @@ void CameraDeviceSession::cleanupBuffersLocked(int id) {
     mCirculatingBuffers.erase(id);
 }
 
-void CameraDeviceSession::updateBufferCaches(const hidl_vec<BufferCache>& cachesToRemove) {
+void LibcameraDeviceSession::updateBufferCaches(const hidl_vec<BufferCache>& cachesToRemove) {
     Mutex::Autolock _l(mInflightLock);
     for (auto& cache : cachesToRemove) {
         auto cbsIt = mCirculatingBuffers.find(cache.streamId);
@@ -1123,19 +1123,19 @@ void CameraDeviceSession::updateBufferCaches(const hidl_vec<BufferCache>& caches
     }
 }
 
-Return<void> CameraDeviceSession::getCaptureRequestMetadataQueue(
+Return<void> LibcameraDeviceSession::getCaptureRequestMetadataQueue(
     ICameraDeviceSession::getCaptureRequestMetadataQueue_cb _hidl_cb) {
     _hidl_cb(*mRequestMetadataQueue->getDesc());
     return Void();
 }
 
-Return<void> CameraDeviceSession::getCaptureResultMetadataQueue(
+Return<void> LibcameraDeviceSession::getCaptureResultMetadataQueue(
     ICameraDeviceSession::getCaptureResultMetadataQueue_cb _hidl_cb) {
     _hidl_cb(*mResultMetadataQueue->getDesc());
     return Void();
 }
 
-Return<void> CameraDeviceSession::processCaptureRequest(
+Return<void> LibcameraDeviceSession::processCaptureRequest(
         const hidl_vec<CaptureRequest>& requests,
         const hidl_vec<BufferCache>& cachesToRemove,
         ICameraDeviceSession::processCaptureRequest_cb _hidl_cb)  {
@@ -1158,7 +1158,7 @@ Return<void> CameraDeviceSession::processCaptureRequest(
     return Void();
 }
 
-Status CameraDeviceSession::processOneCaptureRequest(const CaptureRequest& request)  {
+Status LibcameraDeviceSession::processOneCaptureRequest(const CaptureRequest& request)  {
     Status status = initStatus();
     if (status != Status::OK) {
         ALOGE("%s: camera init failed or disconnected", __FUNCTION__);
@@ -1284,7 +1284,7 @@ Status CameraDeviceSession::processOneCaptureRequest(const CaptureRequest& reque
     return Status::OK;
 }
 
-Return<Status> CameraDeviceSession::flush()  {
+Return<Status> LibcameraDeviceSession::flush()  {
     Status status = initStatus();
     if (status == Status::OK) {
         // Flush is always supported on device 3.1 or later
@@ -1296,7 +1296,7 @@ Return<Status> CameraDeviceSession::flush()  {
     return status;
 }
 
-Return<void> CameraDeviceSession::close()  {
+Return<void> LibcameraDeviceSession::close()  {
     Mutex::Autolock _l(mStateLock);
     if (!mClosed) {
         {
@@ -1338,12 +1338,12 @@ Return<void> CameraDeviceSession::close()  {
     return Void();
 }
 
-uint64_t CameraDeviceSession::getCapResultBufferId(const buffer_handle_t&, int) {
+uint64_t LibcameraDeviceSession::getCapResultBufferId(const buffer_handle_t&, int) {
     // No need to fill in bufferId by default
     return BUFFER_ID_NO_BUFFER;
 }
 
-status_t CameraDeviceSession::constructCaptureResult(CaptureResult& result,
+status_t LibcameraDeviceSession::constructCaptureResult(CaptureResult& result,
                                                  const camera3_capture_result *hal_result) {
     uint32_t frameNumber = hal_result->frame_number;
     bool hasInputBuf = (hal_result->input_buffer != nullptr);
@@ -1501,7 +1501,7 @@ status_t CameraDeviceSession::constructCaptureResult(CaptureResult& result,
 }
 
 // Static helper method to copy/shrink capture result metadata sent by HAL
-void CameraDeviceSession::sShrinkCaptureResult(
+void LibcameraDeviceSession::sShrinkCaptureResult(
         camera3_capture_result* dst, const camera3_capture_result* src,
         std::vector<::android::hardware::camera::common::V1_0::helper::CameraMetadata>* mds,
         std::vector<const camera_metadata_t*>* physCamMdArray,
@@ -1538,7 +1538,7 @@ void CameraDeviceSession::sShrinkCaptureResult(
     }
 }
 
-bool CameraDeviceSession::sShouldShrink(const camera_metadata_t* md) {
+bool LibcameraDeviceSession::sShouldShrink(const camera_metadata_t* md) {
     size_t compactSize = get_camera_metadata_compact_size(md);
     size_t totalSize = get_camera_metadata_size(md);
     if (totalSize >= compactSize + METADATA_SHRINK_ABS_THRESHOLD &&
@@ -1549,7 +1549,7 @@ bool CameraDeviceSession::sShouldShrink(const camera_metadata_t* md) {
     return false;
 }
 
-camera_metadata_t* CameraDeviceSession::sCreateCompactCopy(const camera_metadata_t* src) {
+camera_metadata_t* LibcameraDeviceSession::sCreateCompactCopy(const camera_metadata_t* src) {
     size_t compactSize = get_camera_metadata_compact_size(src);
     void* buffer = calloc(1, compactSize);
     if (buffer == nullptr) {
@@ -1561,11 +1561,11 @@ camera_metadata_t* CameraDeviceSession::sCreateCompactCopy(const camera_metadata
 /**
  * Static callback forwarding methods from HAL to instance
  */
-void CameraDeviceSession::sProcessCaptureResult(
+void LibcameraDeviceSession::sProcessCaptureResult(
         const camera3_callback_ops *cb,
         const camera3_capture_result *hal_result) {
-    CameraDeviceSession *d =
-            const_cast<CameraDeviceSession*>(static_cast<const CameraDeviceSession*>(cb));
+    LibcameraDeviceSession *d =
+            const_cast<LibcameraDeviceSession*>(static_cast<const LibcameraDeviceSession*>(cb));
 
     CaptureResult result = {};
     camera3_capture_result shadowResult;
@@ -1580,11 +1580,11 @@ void CameraDeviceSession::sProcessCaptureResult(
     }
 }
 
-void CameraDeviceSession::sNotify(
+void LibcameraDeviceSession::sNotify(
         const camera3_callback_ops *cb,
         const camera3_notify_msg *msg) {
-    CameraDeviceSession *d =
-            const_cast<CameraDeviceSession*>(static_cast<const CameraDeviceSession*>(cb));
+    LibcameraDeviceSession *d =
+            const_cast<LibcameraDeviceSession*>(static_cast<const LibcameraDeviceSession*>(cb));
     NotifyMsg hidlMsg;
     convertToHidl(msg, &hidlMsg);
 

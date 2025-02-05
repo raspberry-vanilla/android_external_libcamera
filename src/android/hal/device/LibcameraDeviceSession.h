@@ -71,15 +71,15 @@ extern "C" {
         const camera3_notify_msg_t *);
 }
 
-struct CameraDeviceSession : public virtual RefBase, protected camera3_callback_ops  {
+struct LibcameraDeviceSession : public virtual RefBase, protected camera3_callback_ops  {
 
-    CameraDeviceSession(camera3_device_t*,
+    LibcameraDeviceSession(camera3_device_t*,
                         const camera_metadata_t* deviceInfo,
                         const sp<ICameraDeviceCallback>&);
-    virtual ~CameraDeviceSession();
+    virtual ~LibcameraDeviceSession();
     // Call by CameraDevice to dump active device states
     void dumpState(const native_handle_t* fd);
-    // Caller must use this method to check if CameraDeviceSession ctor failed
+    // Caller must use this method to check if LibcameraDeviceSession ctor failed
     bool isInitFailed() { return mInitFail; }
     // Used by CameraDevice to signal external camera disconnected
     void disconnect();
@@ -367,7 +367,7 @@ protected:
 private:
 
     struct TrampolineSessionInterface_3_2 : public ICameraDeviceSession {
-        TrampolineSessionInterface_3_2(sp<CameraDeviceSession> parent) :
+        TrampolineSessionInterface_3_2(sp<LibcameraDeviceSession> parent) :
                 mParent(parent) {}
 
         virtual Return<void> constructDefaultRequestSettings(
@@ -407,7 +407,7 @@ private:
         }
 
     private:
-        sp<CameraDeviceSession> mParent;
+        sp<LibcameraDeviceSession> mParent;
     };
 };
 
