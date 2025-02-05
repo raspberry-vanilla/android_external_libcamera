@@ -36,7 +36,6 @@ namespace android {
 namespace hardware {
 namespace camera {
 namespace device {
-namespace V3_2 {
 namespace implementation {
 
 using ::android::hardware::camera::device::V3_2::CaptureRequest;
@@ -412,7 +411,6 @@ private:
 };
 
 }  // namespace implementation
-}  // namespace V3_2
 }  // namespace device
 }  // namespace camera
 }  // namespace hardware
