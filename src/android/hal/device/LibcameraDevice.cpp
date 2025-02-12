@@ -21,6 +21,7 @@
 #include <utils/Trace.h>
 
 #include "LibcameraDevice.h"
+#include "LibcameraDeviceSession.h"
 #include "convert.h"
 
 #include <aidl/android/hardware/camera/common/Status.h>
@@ -198,6 +199,11 @@ ndk::ScopedAStatus LibcameraDevice::open(const std::shared_ptr<ICameraDeviceCall
     }
 
     Mutex::Autolock _l(mLock);
+    if (mSession != nullptr && !mSession->isClosed()) {
+        ALOGE("%s: cannot open an already opened camera!", __FUNCTION__);
+        _aidl_return = nullptr;
+        return fromStatus(Status::CAMERA_IN_USE);
+    }
 
     /** Open HAL device */
     status_t res;
@@ -233,7 +239,24 @@ ndk::ScopedAStatus LibcameraDevice::open(const std::shared_ptr<ICameraDeviceCall
         return fromStatus(Status::ILLEGAL_ARGUMENT);
     }
 
-    *_aidl_return = nullptr; // session;
+    std::shared_ptr<LibcameraDeviceSession> session;
+    session = createSession(device, info.static_camera_characteristics, in_callback);
+    if (session == nullptr) {
+        ALOGE("%s: camera device session allocation failed", __FUNCTION__);
+        mLock.unlock();
+        _aidl_return = nullptr;
+        return fromStatus(Status::INTERNAL_ERROR);
+    }
+    if (session->isInitFailed()) {
+        ALOGE("%s: camera device session init failed", __FUNCTION__);
+        session = nullptr;
+        mLock.unlock();
+        _aidl_return = nullptr;
+        return fromStatus(Status::INTERNAL_ERROR);
+    }
+    mSession = session;
+
+    *_aidl_return = session;
     return fromStatus(Status::OK);
 }
 ndk::ScopedAStatus LibcameraDevice::openInjectionSession(
@@ -264,6 +287,13 @@ ndk::ScopedAStatus LibcameraDevice::getTorchStrengthLevel(int32_t* _aidl_return)
     // not supported by hardware module
     _aidl_return = nullptr;
     return fromStatus(Status::ILLEGAL_ARGUMENT);
+}
+
+std::shared_ptr<LibcameraDeviceSession> LibcameraDevice::createSession(
+            camera3_device_t* device,
+            const camera_metadata_t* deviceInfo,
+            const std::shared_ptr<ICameraDeviceCallback>& cb) {
+    return ndk::SharedRefBase::make<LibcameraDeviceSession>(device, deviceInfo, cb);
 }
 
 }  // namespace implementation

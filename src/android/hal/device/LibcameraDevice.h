@@ -22,6 +22,8 @@
 
 #include <CameraModule.h>
 
+#include "LibcameraDeviceSession.h"
+
 #include <map>
 #include <memory>
 #include <unordered_map>
@@ -88,6 +90,13 @@ private:
     mutable Mutex mLock;
 
     Status initStatus() const;
+
+    std::shared_ptr<LibcameraDeviceSession> mSession = nullptr;
+
+    virtual std::shared_ptr<LibcameraDeviceSession> createSession(
+            camera3_device_t* device,
+            const camera_metadata_t* deviceInfo,
+            const std::shared_ptr<ICameraDeviceCallback>& cb);
 };
 
 }  // namespace implementation
