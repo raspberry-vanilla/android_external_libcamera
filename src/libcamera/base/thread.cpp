@@ -262,8 +262,6 @@ void Thread::start()
 	data_->exit_.store(false, std::memory_order_relaxed);
 
 	thread_ = std::thread(&Thread::startThread, this);
-
-	setThreadAffinityInternal();
 }
 
 void Thread::startThread()
@@ -293,6 +291,8 @@ void Thread::startThread()
 
 	if (!name_.empty())
 		pthread_setname_np(pthread_self(), name_.substr(0, 15).c_str());
+
+	setThreadAffinityInternal();
 
 	run();
 }
