@@ -16,7 +16,6 @@
 #include <libcamera/base/class.h>
 #include <libcamera/base/message.h>
 #include <libcamera/base/signal.h>
-#include <libcamera/base/span.h>
 #include <libcamera/base/utils.h>
 
 namespace libcamera {
@@ -36,8 +35,6 @@ public:
 	void start();
 	void exit(int code = 0);
 	bool wait(utils::duration duration = utils::duration::max());
-
-	int setThreadAffinity(const Span<const unsigned int> &cpus);
 
 	bool isRunning();
 
@@ -60,8 +57,6 @@ private:
 
 	void startThread();
 	void finishThread();
-
-	void setThreadAffinityInternal();
 
 	void postMessage(std::unique_ptr<Message> msg, Object *receiver);
 	void removeMessages(Object *receiver);
