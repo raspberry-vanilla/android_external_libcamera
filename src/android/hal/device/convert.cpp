@@ -89,6 +89,79 @@ void convertFromAidl(const Stream& src, camera_stream_t* dst) {
     dst->rotation = static_cast<int>(src.rotation);
 }
 
+void convertFromAidl(const Stream &src, Camera3Stream* dst) {
+    dst->mId = src.id;
+    dst->stream_type = static_cast<int>(src.streamType);
+    dst->width = src.width;
+    dst->height = src.height;
+    dst->format = static_cast<int>(src.format);
+    dst->data_space = static_cast<android_dataspace_t>(src.dataSpace);
+    dst->usage = static_cast<uint32_t>(src.usage);
+    dst->physical_camera_id = src.physicalCameraId.c_str();
+    dst->rotation = static_cast<int>(src.rotation);
+    // Fields to be filled by HAL (max_buffers, priv) are initialized to 0
+    dst->max_buffers = 0;
+    dst->priv = 0;
+}
+
+void convertToAidl(const Camera3Stream* src, HalStream* dst) {
+    dst->id = src->mId;
+    dst->overrideFormat = (PixelFormat) src->format;
+    dst->maxBuffers = src->max_buffers;
+    if (src->stream_type == CAMERA3_STREAM_OUTPUT) {
+        dst->consumerUsage = (BufferUsage)0;
+        dst->producerUsage = (BufferUsage)src->usage;
+    } else if (src->stream_type == CAMERA3_STREAM_INPUT) {
+        dst->producerUsage = (BufferUsage)0;
+        dst->consumerUsage = (BufferUsage)src->usage;
+    } else {
+        //Should not reach here per current HIDL spec, but we might end up adding
+        // bi-directional stream to HIDL.
+        ALOGW("%s: Stream type %d is not currently supported!",
+                __FUNCTION__, src->stream_type);
+    }
+}
+
+void convertFromAidl(
+        buffer_handle_t* bufPtr, BufferStatus status, camera3_stream_t* stream, int acquireFence,
+        camera3_stream_buffer_t* dst) {
+    dst->stream = stream;
+    dst->buffer = bufPtr;
+    dst->status = (int) status;
+    dst->acquire_fence = acquireFence;
+    dst->release_fence = -1; // meant for HAL to fill in
+}
+
+void convertToAidl(const camera3_notify_msg* src, NotifyMsg* dst) {
+    switch (src->type) {
+        case CAMERA3_MSG_ERROR:
+            {
+                // The camera3_stream_t* must be the same as what wrapper HAL passed to conventional
+                // HAL, or the ID lookup will return garbage. Caller should validate the ID here is
+                // indeed one of active stream IDs
+                Camera3Stream* stream = static_cast<Camera3Stream*>(
+                        src->message.error.error_stream);
+                aidl::android::hardware::camera::device::ErrorMsg errorMsg = {
+                    .frameNumber = static_cast<int32_t>(src->message.error.frame_number),
+                    .errorStreamId = (stream != nullptr) ? stream->mId : -1,
+                    .errorCode = (ErrorCode) src->message.error.error_code};
+                dst->set<NotifyMsg::Tag::error>(errorMsg);
+            }
+            break;
+        case CAMERA3_MSG_SHUTTER:
+            {
+                aidl::android::hardware::camera::device::ShutterMsg shutterMsg = {
+                        .frameNumber = static_cast<int32_t>(src->message.shutter.frame_number),
+                        .timestamp = static_cast<int64_t>(src->message.shutter.timestamp)};
+                dst->set<NotifyMsg::Tag::shutter>(shutterMsg);
+            }
+            break;
+        default:
+            ALOGE("%s: AIDL type converion failed. Unknown msg type 0x%x",
+                    __func__, src->type);
+    }
+}
+
 }  // namespace implementation
 }  // namespace device
 }  // namespace camera

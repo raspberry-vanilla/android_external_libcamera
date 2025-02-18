@@ -39,6 +39,12 @@ using ::aidl::android::hardware::camera::device::HalStream;
 using ::aidl::android::hardware::camera::device::NotifyMsg;
 using ::aidl::android::hardware::camera::device::Stream;
 
+// The camera3_stream_t sent to conventional HAL. Added mId fields to enable stream ID lookup
+// fromt a downcasted camera3_stream
+struct Camera3Stream : public camera3_stream {
+    int mId;
+};
+
 // convert conventional HAL status to AIDL Status
 Status getAidlStatus(int);
 
@@ -47,6 +53,18 @@ void convertToAidl(const camera_metadata_t* src, CameraMetadata* dest);
 bool convertFromAidl(const CameraMetadata& src, const camera_metadata_t** dst);
 
 void convertFromAidl(const Stream &src, camera_stream_t* dst);
+
+void convertFromAidl(
+        buffer_handle_t*, BufferStatus, camera3_stream_t*, int acquireFence, // inputs
+        camera3_stream_buffer_t* dst);
+
+void convertToAidl(const Camera3Stream* src, HalStream* dst);
+void convertFromAidl(const Stream &src, Camera3Stream* dst);
+
+// The camera3_stream_t* in src must be the same as what wrapper HAL passed to conventional
+// HAL, or the ID lookup will return garbage. Caller should validate the ID in ErrorMsg is
+// indeed one of active stream IDs
+void convertToAidl(const camera3_notify_msg* src, NotifyMsg* dst);
 
 inline ndk::ScopedAStatus fromStatus(Status status) {
     return status == Status::OK

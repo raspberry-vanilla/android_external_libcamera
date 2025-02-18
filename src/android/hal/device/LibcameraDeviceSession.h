@@ -17,12 +17,14 @@
 #ifndef ANDROID_HARDWARE_CAMERA_DEVICE_V3_2_CAMERADEVICE3SESSION_H
 #define ANDROID_HARDWARE_CAMERA_DEVICE_V3_2_CAMERADEVICE3SESSION_H
 
-#include <android/hardware/camera/device/3.2/ICameraDevice.h>
-#include <android/hardware/camera/device/3.2/ICameraDeviceSession.h>
-#include <fmq/MessageQueue.h>
-#include <hidl/MQDescriptor.h>
-#include <hidl/Status.h>
-#include <include/convert.h>
+#include <aidl/android/hardware/camera/common/Status.h>
+#include <aidl/android/hardware/camera/device/BnCameraDeviceSession.h>
+#include <aidl/android/hardware/camera/device/BufferRequest.h>
+#include <aidl/android/hardware/camera/device/Stream.h>
+#include <fmq/AidlMessageQueue.h>
+
+#include "convert.h"
+
 #include <deque>
 #include <map>
 #include <unordered_map>
@@ -38,21 +40,26 @@ namespace camera {
 namespace device {
 namespace implementation {
 
-using ::android::hardware::camera::device::V3_2::CaptureRequest;
-using ::android::hardware::camera::device::V3_2::HalStreamConfiguration;
-using ::android::hardware::camera::device::V3_2::StreamConfiguration;
-using ::android::hardware::camera::device::V3_2::ICameraDeviceSession;
-using ::android::hardware::camera::common::V1_0::Status;
-using ::android::hardware::camera::common::V1_0::helper::HandleImporter;
-using ::android::hardware::kSynchronizedReadWrite;
-using ::android::hardware::MessageQueue;
-using ::android::hardware::MQDescriptorSync;
-using ::android::hardware::Return;
-using ::android::hardware::Void;
-using ::android::hardware::hidl_vec;
-using ::android::hardware::hidl_string;
-using ::android::sp;
+using ::aidl::android::hardware::camera::common::Status;
+using ::aidl::android::hardware::camera::device::BnCameraDeviceSession;
+using ::aidl::android::hardware::camera::device::BufferCache;
+using ::aidl::android::hardware::camera::device::BufferRequest;
+using ::aidl::android::hardware::camera::device::CameraMetadata;
+using ::aidl::android::hardware::camera::device::CameraOfflineSessionInfo;
+using ::aidl::android::hardware::camera::device::CaptureRequest;
+using ::aidl::android::hardware::camera::device::CaptureResult;
+using ::aidl::android::hardware::camera::device::HalStream;
+using ::aidl::android::hardware::camera::device::ICameraDeviceCallback;
+using ::aidl::android::hardware::camera::device::ICameraOfflineSession;
+using ::aidl::android::hardware::camera::device::RequestTemplate;
+using ::aidl::android::hardware::camera::device::Stream;
+using ::aidl::android::hardware::camera::device::StreamBuffer;
+using ::aidl::android::hardware::camera::device::StreamConfiguration;
+using ::aidl::android::hardware::common::fmq::MQDescriptor;
+using ::aidl::android::hardware::common::fmq::SynchronizedReadWrite;
+using ::android::AidlMessageQueue;
 using ::android::Mutex;
+using ::ndk::ScopedAStatus;
 
 struct Camera3Stream;
 
@@ -70,11 +77,11 @@ extern "C" {
         const camera3_notify_msg_t *);
 }
 
-struct LibcameraDeviceSession : public virtual RefBase, protected camera3_callback_ops  {
+struct LibcameraDeviceSession : public BnCameraDeviceSession, protected camera3_callback_ops  {
 
     LibcameraDeviceSession(camera3_device_t*,
                         const camera_metadata_t* deviceInfo,
-                        const sp<ICameraDeviceCallback>&);
+                        const std::shared_ptr<ICameraDeviceCallback>&);
     virtual ~LibcameraDeviceSession();
     // Call by CameraDevice to dump active device states
     void dumpState(const native_handle_t* fd);
@@ -86,31 +93,38 @@ struct LibcameraDeviceSession : public virtual RefBase, protected camera3_callba
 
 protected:
 
-    // Methods from ::android::hardware::camera::device::V3_2::ICameraDeviceSession follow
+    ScopedAStatus constructDefaultRequestSettings(RequestTemplate in_type,
+                                                  CameraMetadata* _aidl_return) override;
+    ScopedAStatus configureStreams(const StreamConfiguration& in_requestedConfiguration,
+                                   std::vector<HalStream>* _aidl_return) override;
+    ScopedAStatus getCaptureRequestMetadataQueue(
+            MQDescriptor<int8_t, SynchronizedReadWrite>* _aidl_return) override;
+    ScopedAStatus getCaptureResultMetadataQueue(
+            MQDescriptor<int8_t, SynchronizedReadWrite>* _aidl_return) override;
+    ScopedAStatus processCaptureRequest(const std::vector<CaptureRequest>& in_requests,
+                                        const std::vector<BufferCache>& in_cachesToRemove,
+                                        int32_t* _aidl_return) override;
+    ScopedAStatus flush() override;
+    ScopedAStatus close() override;
 
-    Return<void> constructDefaultRequestSettings(
-            RequestTemplate type,
-            ICameraDeviceSession::constructDefaultRequestSettings_cb _hidl_cb);
-    Return<void> configureStreams(
-            const StreamConfiguration& requestedConfiguration,
-            ICameraDeviceSession::configureStreams_cb _hidl_cb);
-    Return<void> getCaptureRequestMetadataQueue(
-        ICameraDeviceSession::getCaptureRequestMetadataQueue_cb _hidl_cb);
-    Return<void> getCaptureResultMetadataQueue(
-        ICameraDeviceSession::getCaptureResultMetadataQueue_cb _hidl_cb);
-    Return<void> processCaptureRequest(
-            const hidl_vec<CaptureRequest>& requests,
-            const hidl_vec<BufferCache>& cachesToRemove,
-            ICameraDeviceSession::processCaptureRequest_cb _hidl_cb);
-    Return<Status> flush();
-    Return<void> close();
+    // Missing methods from AIDL: stubs
+    ScopedAStatus isReconfigurationRequired(const CameraMetadata& in_oldSessionParams,
+                                            const CameraMetadata& in_newSessionParams,
+                                            bool* _aidl_return) override;
+    ScopedAStatus signalStreamFlush(const std::vector<int32_t>& in_streamIds,
+                                    int32_t in_streamConfigCounter) override;
+    ScopedAStatus switchToOffline(const std::vector<int32_t>& in_streamsToKeep,
+                                  CameraOfflineSessionInfo* out_offlineSessionInfo,
+                                  std::shared_ptr<ICameraOfflineSession>* _aidl_return) override;
+    ScopedAStatus repeatingRequestEnd(int32_t in_frameNumber,
+                                      const std::vector<int32_t>& in_streamIds) override;
 
     // Helper methods
     Status constructDefaultRequestSettingsRaw(int type, CameraMetadata *outMetadata);
 
     bool preProcessConfigurationLocked(const StreamConfiguration& requestedConfiguration,
             camera3_stream_configuration_t *stream_list /*out*/,
-            hidl_vec<camera3_stream_t*> *streams /*out*/);
+            std::vector<camera3_stream_t*> *streams /*out*/);
     void postProcessConfigurationLocked(const StreamConfiguration& requestedConfiguration);
 
     void postProcessConfigurationFailureLocked(const StreamConfiguration& requestedConfiguration);
@@ -150,9 +164,9 @@ protected:
 
     // (frameNumber, AETriggerOverride) -> inflight request AETriggerOverrides
     std::map<uint32_t, AETriggerCancelOverride> mInflightAETriggerOverrides;
-    ::android::hardware::camera::common::V1_0::helper::CameraMetadata mOverridenResult;
+    ::android::hardware::camera::common::helper::CameraMetadata mOverridenResult;
     std::map<uint32_t, bool> mInflightRawBoostPresent;
-    ::android::hardware::camera::common::V1_0::helper::CameraMetadata mOverridenRequest;
+    ::android::hardware::camera::common::helper::CameraMetadata mOverridenRequest;
 
     static const uint64_t BUFFER_ID_NO_BUFFER = 0;
     // buffers currently ciculating between HAL and camera service
@@ -164,22 +178,22 @@ protected:
     // Stream ID -> circulating buffers map
     std::map<int, CirculatingBuffers> mCirculatingBuffers;
 
-    static HandleImporter sHandleImporter;
+    static common::helper::HandleImporter sHandleImporter;
     static buffer_handle_t sEmptyBuffer;
 
     bool mInitFail;
     bool mFirstRequest = false;
 
-    common::V1_0::helper::CameraMetadata mDeviceInfo;
+    common::helper::CameraMetadata mDeviceInfo;
 
-    using RequestMetadataQueue = MessageQueue<uint8_t, kSynchronizedReadWrite>;
+    using RequestMetadataQueue = AidlMessageQueue<int8_t, SynchronizedReadWrite>;
     std::unique_ptr<RequestMetadataQueue> mRequestMetadataQueue;
-    using ResultMetadataQueue = MessageQueue<uint8_t, kSynchronizedReadWrite>;
+    using ResultMetadataQueue = AidlMessageQueue<int8_t, SynchronizedReadWrite>;
     std::shared_ptr<ResultMetadataQueue> mResultMetadataQueue;
 
     class ResultBatcher {
     public:
-        ResultBatcher(const sp<ICameraDeviceCallback>& callback);
+        ResultBatcher(const std::shared_ptr<ICameraDeviceCallback>& callback);
         void setNumPartialResults(uint32_t n);
         void setBatchedStreams(const std::vector<int>& streamsToBatch);
         void setResultMetadataQueue(std::shared_ptr<ResultMetadataQueue> q);
@@ -267,10 +281,10 @@ protected:
        // End of sendXXXX methods
 
         // helper methods
-        void freeReleaseFences(hidl_vec<CaptureResult>&);
+        void freeReleaseFences(std::vector<CaptureResult>&);
         void notifySingleMsg(NotifyMsg& msg);
         void processOneCaptureResult(CaptureResult& result);
-        void invokeProcessCaptureResultCallback(hidl_vec<CaptureResult> &results, bool tryWriteFmq);
+        void invokeProcessCaptureResultCallback(std::vector<CaptureResult> &results, bool tryWriteFmq);
 
         // Protect access to mInflightBatches, mNumPartialResults and mStreamsToBatch
         // processCaptureRequest, processCaptureResult, notify will compete for this lock
@@ -279,7 +293,7 @@ protected:
         std::deque<std::shared_ptr<InflightBatch>> mInflightBatches;
         uint32_t mNumPartialResults;
         std::vector<int> mStreamsToBatch;
-        const sp<ICameraDeviceCallback> mCallback;
+        const std::shared_ptr<ICameraDeviceCallback> mCallback;
         std::shared_ptr<ResultMetadataQueue> mResultMetadataQueue;
 
         // Protect against invokeProcessCaptureResultCallback()
@@ -298,14 +312,14 @@ protected:
     // Validate and import request's input buffer and acquire fence
     virtual Status importRequest(
             const CaptureRequest& request,
-            hidl_vec<buffer_handle_t*>& allBufPtrs,
-            hidl_vec<int>& allFences);
+            std::vector<buffer_handle_t*>& allBufPtrs,
+            std::vector<int>& allFences);
 
     Status importRequestImpl(
             const CaptureRequest& request,
-            hidl_vec<buffer_handle_t*>& allBufPtrs,
-            hidl_vec<int>& allFences,
-            // Optional argument for ICameraDeviceSession@3.5 impl
+            std::vector<buffer_handle_t*>& allBufPtrs,
+            std::vector<int>& allFences,
+            // Optional argument for BnCameraDeviceSession@3.5 impl
             bool allowEmptyBuf = false);
 
     Status importBuffer(int32_t streamId,
@@ -314,11 +328,11 @@ protected:
             bool allowEmptyBuf);
 
     static void cleanupInflightFences(
-            hidl_vec<int>& allFences, size_t numFences);
+            std::vector<int>& allFences, size_t numFences);
 
     void cleanupBuffersLocked(int id);
 
-    void updateBufferCaches(const hidl_vec<BufferCache>& cachesToRemove);
+    void updateBufferCaches(const std::vector<BufferCache>& cachesToRemove);
 
     android_dataspace mapToLegacyDataspace(
             android_dataspace dataSpace) const;

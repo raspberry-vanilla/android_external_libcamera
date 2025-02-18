@@ -24,11 +24,30 @@
 #include <hardware/gralloc1.h>
 #include "LibcameraDeviceSession.h"
 
+#include <aidl/android/hardware/camera/device/ErrorCode.h>
+#include <aidl/android/hardware/camera/device/StreamType.h>
+#include <aidl/android/hardware/common/NativeHandle.h>
+
+#include <aidl/android/hardware/graphics/common/BufferUsage.h>
+
+#include <aidlcommonsupport/NativeHandle.h>
+
 namespace android {
 namespace hardware {
 namespace camera {
 namespace device {
 namespace implementation {
+
+using ::aidl::android::hardware::camera::device::StreamType;
+using ::aidl::android::hardware::camera::device::ErrorCode;
+using ::aidl::android::hardware::camera::device::ErrorMsg;
+using ::aidl::android::hardware::camera::device::ShutterMsg;
+using ::aidl::android::hardware::common::NativeHandle;
+using ::aidl::android::hardware::graphics::common::BufferUsage;
+
+constexpr bool usageTest(const BufferUsage a, const BufferUsage b) {
+    return (static_cast<uint64_t>(a) & static_cast<uint64_t>(b)) != 0;
+}
 
 // Size of request metadata fast message queue. Change to 0 to always use hwbinder buffer.
 static constexpr int32_t CAMERA_REQUEST_METADATA_QUEUE_SIZE = 1 << 20 /* 1MB */;
@@ -42,7 +61,7 @@ static constexpr int32_t CAMERA_RESULT_METADATA_QUEUE_SIZE  = 1 << 20 /* 1MB */;
 static constexpr int METADATA_SHRINK_ABS_THRESHOLD = 4096;
 static constexpr int METADATA_SHRINK_REL_THRESHOLD = 2;
 
-HandleImporter LibcameraDeviceSession::sHandleImporter;
+common::helper::HandleImporter LibcameraDeviceSession::sHandleImporter;
 buffer_handle_t LibcameraDeviceSession::sEmptyBuffer = nullptr;
 
 const int LibcameraDeviceSession::ResultBatcher::NOT_BATCHED;
@@ -50,7 +69,7 @@ const int LibcameraDeviceSession::ResultBatcher::NOT_BATCHED;
 LibcameraDeviceSession::LibcameraDeviceSession(
     camera3_device_t* device,
     const camera_metadata_t* deviceInfo,
-    const sp<ICameraDeviceCallback>& callback) :
+    const std::shared_ptr<ICameraDeviceCallback>& callback) :
         camera3_callback_ops({&sProcessCaptureResult, &sNotify, nullptr, nullptr}),
         mDevice(device),
         mDeviceVersion(device->common.version),
@@ -300,23 +319,23 @@ Status LibcameraDeviceSession::importBuffer(int32_t streamId,
 
 Status LibcameraDeviceSession::importRequest(
         const CaptureRequest& request,
-        hidl_vec<buffer_handle_t*>& allBufPtrs,
-        hidl_vec<int>& allFences) {
+        std::vector<buffer_handle_t*>& allBufPtrs,
+        std::vector<int>& allFences) {
     return importRequestImpl(request, allBufPtrs, allFences);
 }
 
 Status LibcameraDeviceSession::importRequestImpl(
         const CaptureRequest& request,
-        hidl_vec<buffer_handle_t*>& allBufPtrs,
-        hidl_vec<int>& allFences,
+        std::vector<buffer_handle_t*>& allBufPtrs,
+        std::vector<int>& allFences,
         bool allowEmptyBuf) {
     bool hasInputBuf = (request.inputBuffer.streamId != -1 &&
             request.inputBuffer.bufferId != 0);
     size_t numOutputBufs = request.outputBuffers.size();
     size_t numBufs = numOutputBufs + (hasInputBuf ? 1 : 0);
     // Validate all I/O buffers
-    hidl_vec<buffer_handle_t> allBufs;
-    hidl_vec<uint64_t> allBufIds;
+    std::vector<buffer_handle_t> allBufs;
+    std::vector<uint64_t> allBufIds;
     allBufs.resize(numBufs);
     allBufIds.resize(numBufs);
     allBufPtrs.resize(numBufs);
@@ -324,13 +343,13 @@ Status LibcameraDeviceSession::importRequestImpl(
     std::vector<int32_t> streamIds(numBufs);
 
     for (size_t i = 0; i < numOutputBufs; i++) {
-        allBufs[i] = request.outputBuffers[i].buffer.getNativeHandle();
+        allBufs[i] = makeFromAidl(request.outputBuffers[i].buffer);
         allBufIds[i] = request.outputBuffers[i].bufferId;
         allBufPtrs[i] = &allBufs[i];
         streamIds[i] = request.outputBuffers[i].streamId;
     }
     if (hasInputBuf) {
-        allBufs[numOutputBufs] = request.inputBuffer.buffer.getNativeHandle();
+        allBufs[numOutputBufs] = makeFromAidl(request.inputBuffer.buffer);
         allBufIds[numOutputBufs] = request.inputBuffer.bufferId;
         allBufPtrs[numOutputBufs] = &allBufs[numOutputBufs];
         streamIds[numOutputBufs] = request.inputBuffer.streamId;
@@ -351,7 +370,7 @@ Status LibcameraDeviceSession::importRequestImpl(
     // All buffers are imported. Now validate output buffer acquire fences
     for (size_t i = 0; i < numOutputBufs; i++) {
         if (!sHandleImporter.importFence(
-                request.outputBuffers[i].acquireFence, allFences[i])) {
+                makeFromAidl(request.outputBuffers[i].acquireFence), allFences[i])) {
             ALOGE("%s: output buffer %zu acquire fence is invalid", __FUNCTION__, i);
             cleanupInflightFences(allFences, i);
             return Status::INTERNAL_ERROR;
@@ -361,7 +380,7 @@ Status LibcameraDeviceSession::importRequestImpl(
     // Validate input buffer acquire fences
     if (hasInputBuf) {
         if (!sHandleImporter.importFence(
-                request.inputBuffer.acquireFence, allFences[numOutputBufs])) {
+                makeFromAidl(request.inputBuffer.acquireFence), allFences[numOutputBufs])) {
             ALOGE("%s: input buffer acquire fence is invalid", __FUNCTION__);
             cleanupInflightFences(allFences, numOutputBufs);
             return Status::INTERNAL_ERROR;
@@ -371,14 +390,14 @@ Status LibcameraDeviceSession::importRequestImpl(
 }
 
 void LibcameraDeviceSession::cleanupInflightFences(
-        hidl_vec<int>& allFences, size_t numFences) {
+        std::vector<int>& allFences, size_t numFences) {
     for (size_t j = 0; j < numFences; j++) {
         sHandleImporter.closeFence(allFences[j]);
     }
 }
 
 LibcameraDeviceSession::ResultBatcher::ResultBatcher(
-        const sp<ICameraDeviceCallback>& callback) : mCallback(callback) {};
+        const std::shared_ptr<ICameraDeviceCallback>& callback) : mCallback(callback) {};
 
 bool LibcameraDeviceSession::ResultBatcher::InflightBatch::allDelivered() const {
     if (!mShutterDelivered) return false;
@@ -475,24 +494,22 @@ void LibcameraDeviceSession::ResultBatcher::sendBatchShutterCbsLocked(
     auto ret = mCallback->notify(batch->mShutterMsgs);
     if (!ret.isOk()) {
         ALOGE("%s: notify shutter transaction failed: %s",
-                __FUNCTION__, ret.description().c_str());
+                __FUNCTION__, ret.getMessage());
     }
     batch->mShutterDelivered = true;
     batch->mShutterMsgs.clear();
 }
 
-void LibcameraDeviceSession::ResultBatcher::freeReleaseFences(hidl_vec<CaptureResult>& results) {
+void LibcameraDeviceSession::ResultBatcher::freeReleaseFences(std::vector<CaptureResult>& results) {
     for (auto& result : results) {
-        if (result.inputBuffer.releaseFence.getNativeHandle() != nullptr) {
-            native_handle_t* handle = const_cast<native_handle_t*>(
-                    result.inputBuffer.releaseFence.getNativeHandle());
+        native_handle_t* handle = makeFromAidl(result.inputBuffer.releaseFence);
+        if (handle != nullptr) {
             native_handle_close(handle);
             native_handle_delete(handle);
         }
         for (auto& buf : result.outputBuffers) {
-            if (buf.releaseFence.getNativeHandle() != nullptr) {
-                native_handle_t* handle = const_cast<native_handle_t*>(
-                        buf.releaseFence.getNativeHandle());
+            native_handle_t* resultFence = makeFromAidl(buf.releaseFence);
+            if (resultFence != nullptr) {
                 native_handle_close(handle);
                 native_handle_delete(handle);
             }
@@ -503,25 +520,12 @@ void LibcameraDeviceSession::ResultBatcher::freeReleaseFences(hidl_vec<CaptureRe
 
 void LibcameraDeviceSession::ResultBatcher::moveStreamBuffer(StreamBuffer&& src, StreamBuffer& dst) {
     // Only dealing with releaseFence here. Assume buffer/acquireFence are null
-    const native_handle_t* handle = src.releaseFence.getNativeHandle();
-    src.releaseFence = nullptr;
-    dst = src;
-    dst.releaseFence = handle;
-    if (handle != dst.releaseFence.getNativeHandle()) {
-        ALOGE("%s: native handle cloned!", __FUNCTION__);
-    }
+    dst.releaseFence = std::move(src.releaseFence);
 }
 
 void LibcameraDeviceSession::ResultBatcher::pushStreamBuffer(
         StreamBuffer&& src, std::vector<StreamBuffer>& dst) {
-    // Only dealing with releaseFence here. Assume buffer/acquireFence are null
-    const native_handle_t* handle = src.releaseFence.getNativeHandle();
-    src.releaseFence = nullptr;
-    dst.push_back(src);
-    dst.back().releaseFence = handle;
-    if (handle != dst.back().releaseFence.getNativeHandle()) {
-        ALOGE("%s: native handle cloned!", __FUNCTION__);
-    }
+    dst.push_back(std::move(src));
 }
 
 void LibcameraDeviceSession::ResultBatcher::sendBatchBuffersLocked(
@@ -562,7 +566,7 @@ void LibcameraDeviceSession::ResultBatcher::sendBatchBuffersLocked(
         return;
     }
 
-    hidl_vec<CaptureResult> results;
+    std::vector<CaptureResult> results;
     results.resize(batchSize);
     for (size_t i = 0; i < batchSize; i++) {
         results[i].frameNumber = batch->mFirstFrame + i;
@@ -570,7 +574,7 @@ void LibcameraDeviceSession::ResultBatcher::sendBatchBuffersLocked(
         results[i].partialResult = 0; // 0 for buffer only results
         results[i].inputBuffer.streamId = -1;
         results[i].inputBuffer.bufferId = 0;
-        results[i].inputBuffer.buffer = nullptr;
+        results[i].inputBuffer.buffer = NativeHandle();
         std::vector<StreamBuffer> outBufs;
         outBufs.reserve(streams.size());
         for (int streamId : streams) {
@@ -630,15 +634,13 @@ void LibcameraDeviceSession::ResultBatcher::sendBatchMetadataLocked(
             result.fmqResultSize = 0;
             result.inputBuffer.streamId = -1;
             result.inputBuffer.bufferId = 0;
-            result.inputBuffer.buffer = nullptr;
+            result.inputBuffer.buffer = NativeHandle();
             result.partialResult = partialIdx;
             results.push_back(std::move(result));
         }
         mb.mMds.clear();
     }
-    hidl_vec<CaptureResult> hResults;
-    hResults.setToExternal(results.data(), results.size());
-    invokeProcessCaptureResultCallback(hResults, /* tryWriteFmq */true);
+    invokeProcessCaptureResultCallback(results, /* tryWriteFmq */true);
     batch->mPartialResultProgress = lastPartialResultIdx;
     for (uint32_t partialIdx : toBeRemovedIdxes) {
         batch->mResultMds.erase(partialIdx);
@@ -649,17 +651,19 @@ void LibcameraDeviceSession::ResultBatcher::notifySingleMsg(NotifyMsg& msg) {
     auto ret = mCallback->notify({msg});
     if (!ret.isOk()) {
         ALOGE("%s: notify transaction failed: %s",
-                __FUNCTION__, ret.description().c_str());
+                __FUNCTION__, ret.getMessage());
     }
     return;
 }
 
 void LibcameraDeviceSession::ResultBatcher::notify(NotifyMsg& msg) {
     uint32_t frameNumber;
-    if (CC_LIKELY(msg.type == MsgType::SHUTTER)) {
-        frameNumber = msg.msg.shutter.frameNumber;
+    if (CC_LIKELY(msg.getTag() == NotifyMsg::Tag::shutter)) {
+        ShutterMsg shutterMsg = msg.get<NotifyMsg::Tag::shutter>();
+        frameNumber = shutterMsg.frameNumber;
     } else {
-        frameNumber = msg.msg.error.frameNumber;
+        ErrorMsg errorMsg = msg.get<NotifyMsg::Tag::error>();
+        frameNumber = errorMsg.frameNumber;
     }
 
     auto pair = getBatch(frameNumber);
@@ -670,7 +674,7 @@ void LibcameraDeviceSession::ResultBatcher::notify(NotifyMsg& msg) {
     }
 
     // When error happened, stop batching for all batches earlier
-    if (CC_UNLIKELY(msg.type == MsgType::ERROR)) {
+    if (CC_UNLIKELY(msg.getTag() == NotifyMsg::Tag::error)) {
         Mutex::Autolock _l(mLock);
         for (int i = 0; i <= batchIdx; i++) {
             // Send batched data up
@@ -716,7 +720,7 @@ void LibcameraDeviceSession::ResultBatcher::notify(NotifyMsg& msg) {
 }
 
 void LibcameraDeviceSession::ResultBatcher::invokeProcessCaptureResultCallback(
-        hidl_vec<CaptureResult> &results, bool tryWriteFmq) {
+        std::vector<CaptureResult> &results, bool tryWriteFmq) {
     if (mProcessCaptureResultLock.tryLock() != OK) {
         ALOGV("%s: previous call is not finished! waiting 1s...", __FUNCTION__);
         if (mProcessCaptureResultLock.timedLock(1000000000 /* 1s */) != OK) {
@@ -727,14 +731,16 @@ void LibcameraDeviceSession::ResultBatcher::invokeProcessCaptureResultCallback(
     }
     if (tryWriteFmq && mResultMetadataQueue->availableToWrite() > 0) {
         for (CaptureResult &result : results) {
-            if (result.result.size() > 0) {
-                if (mResultMetadataQueue->write(result.result.data(), result.result.size())) {
-                    result.fmqResultSize = result.result.size();
-                    result.result.resize(0);
+            if (result.result.metadata.size() > 0) {
+                auto res = result.result;
+                if (mResultMetadataQueue->write(reinterpret_cast<int8_t*>(res.metadata.data()),
+                                                res.metadata.size())) {
+                    result.fmqResultSize = res.metadata.size();
+                    res.metadata.resize(0);
                 } else {
                     ALOGW("%s: couldn't utilize fmq, fall back to hwbinder, result size: %zu,"
                     "shared message queue available size: %zu",
-                        __FUNCTION__, result.result.size(),
+                        __FUNCTION__, res.metadata.size(),
                         mResultMetadataQueue->availableToWrite());
                     result.fmqResultSize = 0;
                 }
@@ -744,13 +750,13 @@ void LibcameraDeviceSession::ResultBatcher::invokeProcessCaptureResultCallback(
     auto ret = mCallback->processCaptureResult(results);
     if (!ret.isOk()) {
         ALOGE("%s: processCaptureResult transaction failed: %s",
-                __FUNCTION__, ret.description().c_str());
+                __FUNCTION__, ret.getMessage());
     }
     mProcessCaptureResultLock.unlock();
 }
 
 void LibcameraDeviceSession::ResultBatcher::processOneCaptureResult(CaptureResult& result) {
-    hidl_vec<CaptureResult> results;
+    std::vector<CaptureResult> results;
     results.resize(1);
     results[0] = std::move(result);
     invokeProcessCaptureResultCallback(results, /* tryWriteFmq */true);
@@ -776,7 +782,7 @@ void LibcameraDeviceSession::ResultBatcher::processCaptureResult(CaptureResult& 
         }
 
         // queue metadata
-        if (result.result.size() != 0) {
+        if (result.result.metadata.size() != 0) {
             // Save a copy of metadata
             batch->mResultMds[result.partialResult].mMds.push_back(
                     std::make_pair(result.frameNumber, result.result));
@@ -830,13 +836,10 @@ void LibcameraDeviceSession::ResultBatcher::processCaptureResult(CaptureResult& 
     }
 }
 
-// Methods from ::android::hardware::camera::device::V3_2::ICameraDeviceSession follow.
-Return<void> LibcameraDeviceSession::constructDefaultRequestSettings(
-        RequestTemplate type, ICameraDeviceSession::constructDefaultRequestSettings_cb _hidl_cb)  {
-    CameraMetadata outMetadata;
-    Status status = constructDefaultRequestSettingsRaw( (int) type, &outMetadata);
-    _hidl_cb(status, outMetadata);
-    return Void();
+ScopedAStatus LibcameraDeviceSession::constructDefaultRequestSettings(RequestTemplate in_type,
+                                                                      CameraMetadata* _aidl_return) {
+    Status status = constructDefaultRequestSettingsRaw((int)in_type, _aidl_return);
+    return fromStatus(status);
 }
 
 Status LibcameraDeviceSession::constructDefaultRequestSettingsRaw(int type, CameraMetadata *outMetadata) {
@@ -863,7 +866,7 @@ Status LibcameraDeviceSession::constructDefaultRequestSettingsRaw(int type, Came
             }
             const camera_metadata_t *metaBuffer =
                     mOverridenRequest.getAndLock();
-            convertToHidl(metaBuffer, outMetadata);
+            convertToAidl(metaBuffer, outMetadata);
             mOverridenRequest.unlock(metaBuffer);
         }
     }
@@ -901,25 +904,25 @@ android_dataspace LibcameraDeviceSession::mapToLegacyDataspace(
 }
 
 bool LibcameraDeviceSession::preProcessConfigurationLocked(
-        const StreamConfiguration& requestedConfiguration,
+        const StreamConfiguration& in_requestedConfiguration,
         camera3_stream_configuration_t *stream_list /*out*/,
-        hidl_vec<camera3_stream_t*> *streams /*out*/) {
+        std::vector<camera3_stream_t*> *streams /*out*/) {
 
     if ((stream_list == nullptr) || (streams == nullptr)) {
         return false;
     }
 
-    stream_list->operation_mode = (uint32_t) requestedConfiguration.operationMode;
-    stream_list->num_streams = requestedConfiguration.streams.size();
+    stream_list->operation_mode = (uint32_t) in_requestedConfiguration.operationMode;
+    stream_list->num_streams = in_requestedConfiguration.streams.size();
     streams->resize(stream_list->num_streams);
     stream_list->streams = streams->data();
 
     for (uint32_t i = 0; i < stream_list->num_streams; i++) {
-        int id = requestedConfiguration.streams[i].id;
+        int id = in_requestedConfiguration.streams[i].id;
 
         if (mStreamMap.count(id) == 0) {
             Camera3Stream stream;
-            convertFromHidl(requestedConfiguration.streams[i], &stream);
+            convertFromAidl(in_requestedConfiguration.streams[i], &stream);
             mStreamMap[id] = stream;
             mStreamMap[id].data_space = mapToLegacyDataspace(
                     mStreamMap[id].data_space);
@@ -927,18 +930,18 @@ bool LibcameraDeviceSession::preProcessConfigurationLocked(
         } else {
             // width/height/format must not change, but usage/rotation might need to change
             if (mStreamMap[id].stream_type !=
-                    (int) requestedConfiguration.streams[i].streamType ||
-                    mStreamMap[id].width != requestedConfiguration.streams[i].width ||
-                    mStreamMap[id].height != requestedConfiguration.streams[i].height ||
-                    mStreamMap[id].format != (int) requestedConfiguration.streams[i].format ||
+                    (int) in_requestedConfiguration.streams[i].streamType ||
+                    mStreamMap[id].width != in_requestedConfiguration.streams[i].width ||
+                    mStreamMap[id].height != in_requestedConfiguration.streams[i].height ||
+                    mStreamMap[id].format != (int) in_requestedConfiguration.streams[i].format ||
                     mStreamMap[id].data_space !=
                             mapToLegacyDataspace( static_cast<android_dataspace_t> (
-                                    requestedConfiguration.streams[i].dataSpace))) {
+                                    in_requestedConfiguration.streams[i].dataSpace))) {
                 ALOGE("%s: stream %d configuration changed!", __FUNCTION__, id);
                 return false;
             }
-            mStreamMap[id].rotation = (int) requestedConfiguration.streams[i].rotation;
-            mStreamMap[id].usage = (uint32_t) requestedConfiguration.streams[i].usage;
+            mStreamMap[id].rotation = (int) in_requestedConfiguration.streams[i].rotation;
+            mStreamMap[id].usage = (uint32_t) in_requestedConfiguration.streams[i].usage;
         }
         (*streams)[i] = &mStreamMap[id];
     }
@@ -948,7 +951,7 @@ bool LibcameraDeviceSession::preProcessConfigurationLocked(
         for(auto it = mStreamMap.begin(); it != mStreamMap.end(); it++) {
             int id = it->first;
             bool found = false;
-            for (const auto& stream : requestedConfiguration.streams) {
+            for (const auto& stream : in_requestedConfiguration.streams) {
                 if (id == stream.id) {
                     found = true;
                     break;
@@ -965,14 +968,14 @@ bool LibcameraDeviceSession::preProcessConfigurationLocked(
 }
 
 void LibcameraDeviceSession::postProcessConfigurationLocked(
-        const StreamConfiguration& requestedConfiguration) {
+        const StreamConfiguration& in_requestedConfiguration) {
     // delete unused streams, note we do this after adding new streams to ensure new stream
     // will not have the same address as deleted stream, and HAL has a chance to reference
     // the to be deleted stream in configure_streams call
     for(auto it = mStreamMap.begin(); it != mStreamMap.end();) {
         int id = it->first;
         bool found = false;
-        for (const auto& stream : requestedConfiguration.streams) {
+        for (const auto& stream : in_requestedConfiguration.streams) {
             if (id == stream.id) {
                 found = true;
                 break;
@@ -993,10 +996,9 @@ void LibcameraDeviceSession::postProcessConfigurationLocked(
 
     // Track video streams
     mVideoStreamIds.clear();
-    for (const auto& stream : requestedConfiguration.streams) {
+    for (const auto& stream : in_requestedConfiguration.streams) {
         if (stream.streamType == StreamType::OUTPUT &&
-            stream.usage &
-                graphics::common::V1_0::BufferUsage::VIDEO_ENCODER) {
+            usageTest(stream.usage, BufferUsage::VIDEO_ENCODER)) {
             mVideoStreamIds.push_back(stream.id);
         }
     }
@@ -1005,13 +1007,13 @@ void LibcameraDeviceSession::postProcessConfigurationLocked(
 
 
 void LibcameraDeviceSession::postProcessConfigurationFailureLocked(
-        const StreamConfiguration& requestedConfiguration) {
+        const StreamConfiguration& in_requestedConfiguration) {
     if (mFreeBufEarly) {
         // Re-build the buf cache entry for deleted streams
         for(auto it = mStreamMap.begin(); it != mStreamMap.end(); it++) {
             int id = it->first;
             bool found = false;
-            for (const auto& stream : requestedConfiguration.streams) {
+            for (const auto& stream : in_requestedConfiguration.streams) {
                 if (id == stream.id) {
                     found = true;
                     break;
@@ -1024,11 +1026,10 @@ void LibcameraDeviceSession::postProcessConfigurationFailureLocked(
     }
 }
 
-Return<void> LibcameraDeviceSession::configureStreams(
-        const StreamConfiguration& requestedConfiguration,
-        ICameraDeviceSession::configureStreams_cb _hidl_cb)  {
+ScopedAStatus LibcameraDeviceSession::configureStreams(
+        const StreamConfiguration& in_requestedConfiguration,
+        std::vector<HalStream>* _aidl_return) {
     Status status = initStatus();
-    HalStreamConfiguration outStreams;
 
     // hold the inflight lock for entire configureStreams scope since there must not be any
     // inflight request/results during stream configuration.
@@ -1036,36 +1037,36 @@ Return<void> LibcameraDeviceSession::configureStreams(
     if (!mInflightBuffers.empty()) {
         ALOGE("%s: trying to configureStreams while there are still %zu inflight buffers!",
                 __FUNCTION__, mInflightBuffers.size());
-        _hidl_cb(Status::INTERNAL_ERROR, outStreams);
-        return Void();
+        _aidl_return = nullptr;
+        return fromStatus(Status::INTERNAL_ERROR);
     }
 
     if (!mInflightAETriggerOverrides.empty()) {
         ALOGE("%s: trying to configureStreams while there are still %zu inflight"
                 " trigger overrides!", __FUNCTION__,
                 mInflightAETriggerOverrides.size());
-        _hidl_cb(Status::INTERNAL_ERROR, outStreams);
-        return Void();
+        _aidl_return = nullptr;
+        return fromStatus(Status::INTERNAL_ERROR);
     }
 
     if (!mInflightRawBoostPresent.empty()) {
         ALOGE("%s: trying to configureStreams while there are still %zu inflight"
                 " boost overrides!", __FUNCTION__,
                 mInflightRawBoostPresent.size());
-        _hidl_cb(Status::INTERNAL_ERROR, outStreams);
-        return Void();
+        _aidl_return = nullptr;
+        return fromStatus(Status::INTERNAL_ERROR);
     }
 
     if (status != Status::OK) {
-        _hidl_cb(status, outStreams);
-        return Void();
+        _aidl_return = nullptr;
+        return fromStatus(status);
     }
 
     camera3_stream_configuration_t stream_list{};
-    hidl_vec<camera3_stream_t*> streams;
-    if (!preProcessConfigurationLocked(requestedConfiguration, &stream_list, &streams)) {
-        _hidl_cb(Status::INTERNAL_ERROR, outStreams);
-        return Void();
+    std::vector<camera3_stream_t*> streams;
+    if (!preProcessConfigurationLocked(in_requestedConfiguration, &stream_list, &streams)) {
+        _aidl_return = nullptr;
+        return fromStatus(Status::INTERNAL_ERROR);
     }
 
     ATRACE_BEGIN("camera3->configure_streams");
@@ -1075,9 +1076,9 @@ Return<void> LibcameraDeviceSession::configureStreams(
     // In case Hal returns error most likely it was not able to release
     // the corresponding resources of the deleted streams.
     if (ret == OK) {
-        postProcessConfigurationLocked(requestedConfiguration);
+        postProcessConfigurationLocked(in_requestedConfiguration);
     } else {
-        postProcessConfigurationFailureLocked(requestedConfiguration);
+        postProcessConfigurationFailureLocked(in_requestedConfiguration);
     }
 
     if (ret == -EINVAL) {
@@ -1085,12 +1086,14 @@ Return<void> LibcameraDeviceSession::configureStreams(
     } else if (ret != OK) {
         status = Status::INTERNAL_ERROR;
     } else {
-        convertToHidl(stream_list, &outStreams);
+        std::vector<HalStream>& out = *_aidl_return;
+        out.resize(stream_list.num_streams);
+        for (size_t i = 0; i < stream_list.num_streams; i++) {
+            convertToAidl(static_cast<Camera3Stream*>(streams[i]), &out[i]);
+        }
         mFirstRequest = true;
     }
-
-    _hidl_cb(status, outStreams);
-    return Void();
+    return fromStatus(status);
 }
 
 // Needs to get called after acquiring 'mInflightLock'
@@ -1102,7 +1105,7 @@ void LibcameraDeviceSession::cleanupBuffersLocked(int id) {
     mCirculatingBuffers.erase(id);
 }
 
-void LibcameraDeviceSession::updateBufferCaches(const hidl_vec<BufferCache>& cachesToRemove) {
+void LibcameraDeviceSession::updateBufferCaches(const std::vector<BufferCache>& cachesToRemove) {
     Mutex::Autolock _l(mInflightLock);
     for (auto& cache : cachesToRemove) {
         auto cbsIt = mCirculatingBuffers.find(cache.streamId);
@@ -1122,39 +1125,37 @@ void LibcameraDeviceSession::updateBufferCaches(const hidl_vec<BufferCache>& cac
     }
 }
 
-Return<void> LibcameraDeviceSession::getCaptureRequestMetadataQueue(
-    ICameraDeviceSession::getCaptureRequestMetadataQueue_cb _hidl_cb) {
-    _hidl_cb(*mRequestMetadataQueue->getDesc());
-    return Void();
+ScopedAStatus LibcameraDeviceSession::getCaptureRequestMetadataQueue(
+        MQDescriptor<int8_t, SynchronizedReadWrite>* _aidl_return) {
+    *_aidl_return = mRequestMetadataQueue->dupeDesc();
+    return fromStatus(Status::OK);
 }
 
-Return<void> LibcameraDeviceSession::getCaptureResultMetadataQueue(
-    ICameraDeviceSession::getCaptureResultMetadataQueue_cb _hidl_cb) {
-    _hidl_cb(*mResultMetadataQueue->getDesc());
-    return Void();
+ScopedAStatus LibcameraDeviceSession::getCaptureResultMetadataQueue(
+        MQDescriptor<int8_t, SynchronizedReadWrite>* _aidl_return) {
+    *_aidl_return = mResultMetadataQueue->dupeDesc();
+    return fromStatus(Status::OK);
 }
 
-Return<void> LibcameraDeviceSession::processCaptureRequest(
-        const hidl_vec<CaptureRequest>& requests,
-        const hidl_vec<BufferCache>& cachesToRemove,
-        ICameraDeviceSession::processCaptureRequest_cb _hidl_cb)  {
-    updateBufferCaches(cachesToRemove);
-
+ScopedAStatus LibcameraDeviceSession::processCaptureRequest(const std::vector<CaptureRequest>& in_requests,
+                                                            const std::vector<BufferCache>& in_cachesToRemove,
+                                                            int32_t* _aidl_return) {
+    updateBufferCaches(in_cachesToRemove);
     uint32_t numRequestProcessed = 0;
     Status s = Status::OK;
-    for (size_t i = 0; i < requests.size(); i++, numRequestProcessed++) {
-        s = processOneCaptureRequest(requests[i]);
+    for (size_t i = 0; i < in_requests.size(); i++, numRequestProcessed++) {
+        s = processOneCaptureRequest(in_requests[i]);
         if (s != Status::OK) {
             break;
         }
     }
 
-    if (s == Status::OK && requests.size() > 1) {
-        mResultBatcher.registerBatch(requests[0].frameNumber, requests.size());
+    if (s == Status::OK && in_requests.size() > 1) {
+        mResultBatcher.registerBatch(in_requests[0].frameNumber, in_requests.size());
     }
 
-    _hidl_cb(s, numRequestProcessed);
-    return Void();
+    *_aidl_return = numRequestProcessed;
+    return fromStatus(s);
 }
 
 Status LibcameraDeviceSession::processOneCaptureRequest(const CaptureRequest& request)  {
@@ -1172,16 +1173,17 @@ Status LibcameraDeviceSession::processOneCaptureRequest(const CaptureRequest& re
     if (request.fmqSettingsSize > 0) {
         // non-blocking read; client must write metadata before calling
         // processOneCaptureRequest
-        settingsFmq.resize(request.fmqSettingsSize);
-        bool read = mRequestMetadataQueue->read(settingsFmq.data(), request.fmqSettingsSize);
+        settingsFmq.metadata.resize(request.fmqSettingsSize);
+        bool read = mRequestMetadataQueue->read(reinterpret_cast<int8_t*>(settingsFmq.metadata.data()),
+                                                request.fmqSettingsSize);
         if (read) {
-            converted = convertFromHidl(settingsFmq, &halRequest.settings);
+            converted = convertFromAidl(settingsFmq, &halRequest.settings);
         } else {
             ALOGE("%s: capture request settings metadata couldn't be read from fmq!", __FUNCTION__);
             converted = false;
         }
     } else {
-        converted = convertFromHidl(request.settings, &halRequest.settings);
+        converted = convertFromAidl(request.settings, &halRequest.settings);
     }
 
     if (!converted) {
@@ -1195,8 +1197,8 @@ Status LibcameraDeviceSession::processOneCaptureRequest(const CaptureRequest& re
         return Status::ILLEGAL_ARGUMENT;
     }
 
-    hidl_vec<buffer_handle_t*> allBufPtrs;
-    hidl_vec<int> allFences;
+    std::vector<buffer_handle_t*> allBufPtrs;
+    std::vector<int> allFences;
     bool hasInputBuf = (request.inputBuffer.streamId != -1 &&
             request.inputBuffer.bufferId != 0);
     size_t numOutputBufs = request.outputBuffers.size();
@@ -1212,7 +1214,7 @@ Status LibcameraDeviceSession::processOneCaptureRequest(const CaptureRequest& re
         return status;
     }
 
-    hidl_vec<camera3_stream_buffer_t> outHalBufs;
+    std::vector<camera3_stream_buffer_t> outHalBufs;
     outHalBufs.resize(numOutputBufs);
     bool aeCancelTriggerNeeded = false;
     ::android::hardware::camera::common::V1_0::helper::CameraMetadata settingsOverride;
@@ -1221,7 +1223,7 @@ Status LibcameraDeviceSession::processOneCaptureRequest(const CaptureRequest& re
         if (hasInputBuf) {
             auto key = std::make_pair(request.inputBuffer.streamId, request.frameNumber);
             auto& bufCache = mInflightBuffers[key] = camera3_stream_buffer_t{};
-            convertFromHidl(
+            convertFromAidl(
                     allBufPtrs[numOutputBufs], request.inputBuffer.status,
                     &mStreamMap[request.inputBuffer.streamId], allFences[numOutputBufs],
                     &bufCache);
@@ -1234,7 +1236,7 @@ Status LibcameraDeviceSession::processOneCaptureRequest(const CaptureRequest& re
         for (size_t i = 0; i < numOutputBufs; i++) {
             auto key = std::make_pair(request.outputBuffers[i].streamId, request.frameNumber);
             auto& bufCache = mInflightBuffers[key] = camera3_stream_buffer_t{};
-            convertFromHidl(
+            convertFromAidl(
                     allBufPtrs[i], request.outputBuffers[i].status,
                     &mStreamMap[request.outputBuffers[i].streamId], allFences[i],
                     &bufCache);
@@ -1283,7 +1285,7 @@ Status LibcameraDeviceSession::processOneCaptureRequest(const CaptureRequest& re
     return Status::OK;
 }
 
-Return<Status> LibcameraDeviceSession::flush()  {
+ScopedAStatus LibcameraDeviceSession::flush()  {
     Status status = initStatus();
     if (status == Status::OK) {
         // Flush is always supported on device 3.1 or later
@@ -1292,10 +1294,10 @@ Return<Status> LibcameraDeviceSession::flush()  {
             status = Status::INTERNAL_ERROR;
         }
     }
-    return status;
+    return fromStatus(status);
 }
 
-Return<void> LibcameraDeviceSession::close()  {
+ScopedAStatus LibcameraDeviceSession::close()  {
     Mutex::Autolock _l(mStateLock);
     if (!mClosed) {
         {
@@ -1334,7 +1336,7 @@ Return<void> LibcameraDeviceSession::close()  {
 
         mClosed = true;
     }
-    return Void();
+    return fromStatus(Status::OK);
 }
 
 uint64_t LibcameraDeviceSession::getCapResultBufferId(const buffer_handle_t&, int) {
@@ -1377,7 +1379,7 @@ status_t LibcameraDeviceSession::constructCaptureResult(CaptureResult& result,
     result.frameNumber = frameNumber;
     result.fmqResultSize = 0;
     result.partialResult = hal_result->partial_result;
-    convertToHidl(hal_result->result, &result.result);
+    convertToAidl(hal_result->result, &result.result);
     if (nullptr != hal_result->result) {
         bool resultOverriden = false;
         Mutex::Autolock _l(mInflightLock);
@@ -1429,22 +1431,23 @@ status_t LibcameraDeviceSession::constructCaptureResult(CaptureResult& result,
         if (resultOverriden) {
             const camera_metadata_t *metaBuffer =
                     mOverridenResult.getAndLock();
-            convertToHidl(metaBuffer, &result.result);
+            convertToAidl(metaBuffer, &result.result);
             mOverridenResult.unlock(metaBuffer);
         }
     }
     if (hasInputBuf) {
         result.inputBuffer.streamId =
                 static_cast<Camera3Stream*>(hal_result->input_buffer->stream)->mId;
-        result.inputBuffer.buffer = nullptr;
+        result.inputBuffer.buffer = NativeHandle();
         result.inputBuffer.status = (BufferStatus) hal_result->input_buffer->status;
         // skip acquire fence since it's no use to camera service
         if (hal_result->input_buffer->release_fence != -1) {
             native_handle_t* handle = native_handle_create(/*numFds*/1, /*numInts*/0);
             handle->data[0] = hal_result->input_buffer->release_fence;
-            result.inputBuffer.releaseFence = handle;
+            result.inputBuffer.releaseFence = android::dupToAidl(handle);
+            native_handle_delete(handle);
         } else {
-            result.inputBuffer.releaseFence = nullptr;
+            result.inputBuffer.releaseFence = NativeHandle();
         }
     } else {
         result.inputBuffer.streamId = -1;
@@ -1454,7 +1457,7 @@ status_t LibcameraDeviceSession::constructCaptureResult(CaptureResult& result,
     for (size_t i = 0; i < numOutputBufs; i++) {
         result.outputBuffers[i].streamId =
                 static_cast<Camera3Stream*>(hal_result->output_buffers[i].stream)->mId;
-        result.outputBuffers[i].buffer = nullptr;
+        result.outputBuffers[i].buffer = NativeHandle();
         if (hal_result->output_buffers[i].buffer != nullptr) {
             result.outputBuffers[i].bufferId = getCapResultBufferId(
                     *(hal_result->output_buffers[i].buffer),
@@ -1468,9 +1471,10 @@ status_t LibcameraDeviceSession::constructCaptureResult(CaptureResult& result,
         if (hal_result->output_buffers[i].release_fence != -1) {
             native_handle_t* handle = native_handle_create(/*numFds*/1, /*numInts*/0);
             handle->data[0] = hal_result->output_buffers[i].release_fence;
-            result.outputBuffers[i].releaseFence = handle;
+            result.outputBuffers[i].releaseFence = android::dupToAidl(handle);
+            native_handle_delete(handle);
         } else {
-            result.outputBuffers[i].releaseFence = nullptr;
+            result.outputBuffers[i].releaseFence = NativeHandle();
         }
     }
 
@@ -1584,36 +1588,39 @@ void LibcameraDeviceSession::sNotify(
         const camera3_notify_msg *msg) {
     LibcameraDeviceSession *d =
             const_cast<LibcameraDeviceSession*>(static_cast<const LibcameraDeviceSession*>(cb));
-    NotifyMsg hidlMsg;
-    convertToHidl(msg, &hidlMsg);
+    NotifyMsg aidlMsg;
+    convertToAidl(msg, &aidlMsg);
 
-    if (hidlMsg.type == (MsgType) CAMERA3_MSG_ERROR &&
-            hidlMsg.msg.error.errorStreamId != -1) {
-        if (d->mStreamMap.count(hidlMsg.msg.error.errorStreamId) != 1) {
-            ALOGE("%s: unknown stream ID %d reports an error!",
-                    __FUNCTION__, hidlMsg.msg.error.errorStreamId);
-            return;
+    if (aidlMsg.getTag() == NotifyMsg::Tag::error) {
+        auto errorMsg = aidlMsg.get<NotifyMsg::Tag::error>();
+        if (errorMsg.errorStreamId != -1) {
+            if (d->mStreamMap.count(errorMsg.errorStreamId) != 1) {
+                ALOGE("%s: unknown stream ID %d reports an error!",
+                        __FUNCTION__, errorMsg.errorStreamId);
+                return;
+            }
         }
     }
 
-    if (static_cast<camera3_msg_type_t>(hidlMsg.type) == CAMERA3_MSG_ERROR) {
-        switch (hidlMsg.msg.error.errorCode) {
+    if (aidlMsg.getTag() == NotifyMsg::Tag::error) {
+        auto errorMsg = aidlMsg.get<NotifyMsg::Tag::error>();
+        switch (errorMsg.errorCode) {
             case ErrorCode::ERROR_DEVICE:
             case ErrorCode::ERROR_REQUEST:
             case ErrorCode::ERROR_RESULT: {
                 Mutex::Autolock _l(d->mInflightLock);
                 auto entry = d->mInflightAETriggerOverrides.find(
-                        hidlMsg.msg.error.frameNumber);
+                        errorMsg.frameNumber);
                 if (d->mInflightAETriggerOverrides.end() != entry) {
                     d->mInflightAETriggerOverrides.erase(
-                            hidlMsg.msg.error.frameNumber);
+                            errorMsg.frameNumber);
                 }
 
                 auto boostEntry = d->mInflightRawBoostPresent.find(
-                        hidlMsg.msg.error.frameNumber);
+                        errorMsg.frameNumber);
                 if (d->mInflightRawBoostPresent.end() != boostEntry) {
                     d->mInflightRawBoostPresent.erase(
-                            hidlMsg.msg.error.frameNumber);
+                            errorMsg.frameNumber);
                 }
 
             }
@@ -1625,7 +1632,33 @@ void LibcameraDeviceSession::sNotify(
 
     }
 
-    d->mResultBatcher.notify(hidlMsg);
+    d->mResultBatcher.notify(aidlMsg);
+}
+
+ScopedAStatus LibcameraDeviceSession::isReconfigurationRequired(
+        const CameraMetadata& in_oldSessionParams, const CameraMetadata& in_newSessionParams,
+        bool* _aidl_return) {
+    ALOGI("%s()", __func__);
+    *_aidl_return = false;
+    return fromStatus(Status::INTERNAL_ERROR);
+}
+ScopedAStatus LibcameraDeviceSession::signalStreamFlush(const std::vector<int32_t>& in_streamIds,
+                                                        int32_t in_streamConfigCounter) {
+    ALOGI("%s()", __func__);
+    return fromStatus(Status::INTERNAL_ERROR);
+}
+ScopedAStatus LibcameraDeviceSession::switchToOffline(
+        const std::vector<int32_t>& in_streamsToKeep,
+        CameraOfflineSessionInfo* out_offlineSessionInfo,
+        std::shared_ptr<ICameraOfflineSession>* _aidl_return) {
+    ALOGI("%s()", __func__);
+    *_aidl_return = nullptr;
+    return fromStatus(Status::INTERNAL_ERROR);
+}
+ScopedAStatus LibcameraDeviceSession::repeatingRequestEnd(
+        int32_t in_frameNumber, const std::vector<int32_t>& in_streamIds) {
+    ALOGI("%s()", __func__);
+    return fromStatus(Status::INTERNAL_ERROR);
 }
 
 } // namespace implementation
