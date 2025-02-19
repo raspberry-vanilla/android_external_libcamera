@@ -65,6 +65,24 @@ static int hal_init()
 	return 0;
 }
 
+static int hal_get_physical_camera_info([[maybe_unused]] int physical_camera_id,
+					[[maybe_unused]] camera_metadata_t **static_metadata)
+{
+	return 0;
+}
+
+
+static int hal_is_stream_combination_supported([[maybe_unused]] int camera_id,
+					       [[maybe_unused]] const camera_stream_combination_t *streams)
+{
+	return 0;
+}
+
+static void hal_notify_device_state_change([[maybe_unused]] uint64_t deviceState)
+{
+	return;
+}
+
 /*------------------------------------------------------------------------------
  * Android Camera Device
  */
@@ -95,7 +113,7 @@ static struct hw_module_methods_t hal_module_methods = {
 camera_module_t HAL_MODULE_INFO_SYM = {
 	.common = {
 		.tag = HARDWARE_MODULE_TAG,
-		.module_api_version = CAMERA_MODULE_API_VERSION_2_4,
+		.module_api_version = CAMERA_MODULE_API_VERSION_2_5,
 		.hal_api_version = HARDWARE_HAL_API_VERSION,
 		.id = CAMERA_HARDWARE_MODULE_ID,
 		.name = "libcamera camera HALv3 module",
@@ -112,5 +130,8 @@ camera_module_t HAL_MODULE_INFO_SYM = {
 	.open_legacy = hal_open_legacy,
 	.set_torch_mode = hal_set_torch_mode,
 	.init = hal_init,
+	.get_physical_camera_info = hal_get_physical_camera_info,
+	.is_stream_combination_supported = hal_is_stream_combination_supported,
+	.notify_device_state_change = hal_notify_device_state_change,
 	.reserved = {},
 };
