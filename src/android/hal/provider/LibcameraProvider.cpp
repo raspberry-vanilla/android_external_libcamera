@@ -354,9 +354,9 @@ ndk::ScopedAStatus LibcameraProvider::setCallback(
         const std::shared_ptr<ICameraProviderCallback>& in_callback) {
     Mutex::Autolock _l(mCbLock);
     mCallbacks = in_callback;
-    if (in_callback == nullptr) {
-        return fromStatus(Status::OK);
-    }
+    if (in_callback == nullptr)
+        return fromStatus(Status::ILLEGAL_ARGUMENT);
+
     // Add and report all presenting external cameras.
     for (auto const& statusPair : mCameraStatusMap) {
         int id = std::stoi(statusPair.first);
