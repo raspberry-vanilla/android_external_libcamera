@@ -263,7 +263,7 @@ ndk::ScopedAStatus LibcameraDevice::openInjectionSession(
         const std::shared_ptr<ICameraDeviceCallback>& in_callback,
         std::shared_ptr<ICameraInjectionSession>* _aidl_return) {
     _aidl_return = nullptr;
-    return fromStatus(Status::ILLEGAL_ARGUMENT);
+    return fromStatus(Status::OPERATION_NOT_SUPPORTED);
 }
 
 ndk::ScopedAStatus LibcameraDevice::setTorchMode(bool in_on) {
