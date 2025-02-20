@@ -280,13 +280,13 @@ ndk::ScopedAStatus LibcameraDevice::setTorchMode(bool in_on) {
 
 ndk::ScopedAStatus LibcameraDevice::turnOnTorchWithStrengthLevel(int32_t in_torchStrength) {
     // not supported by hardware module
-    return fromStatus(Status::ILLEGAL_ARGUMENT);
+    return fromStatus(Status::OPERATION_NOT_SUPPORTED);
 }
 
 ndk::ScopedAStatus LibcameraDevice::getTorchStrengthLevel(int32_t* _aidl_return) {
     // not supported by hardware module
     _aidl_return = nullptr;
-    return fromStatus(Status::ILLEGAL_ARGUMENT);
+    return fromStatus(Status::OPERATION_NOT_SUPPORTED);
 }
 
 std::shared_ptr<LibcameraDeviceSession> LibcameraDevice::createSession(
