@@ -35,17 +35,10 @@ int main()
     std::shared_ptr<LibcameraProvider> provider = ndk::SharedRefBase::make<LibcameraProvider>();
     const std::string serviceName = std::string(LibcameraProvider::descriptor) + "/libcamera/0";
 
-#ifdef LAZY_SERVICE
-    binder_exception_t ret = AServiceManager_registerLazyService(provider->asBinder().get(),
-                                                                 serviceName.c_str());
-    LOG_ALWAYS_FATAL_IF(ret != EX_NONE,
-                        "Error while registering lazy libcamera camera provider service: %d", ret);
-#else
     binder_exception_t ret =
             AServiceManager_addService(provider->asBinder().get(), serviceName.c_str());
     LOG_ALWAYS_FATAL_IF(ret != EX_NONE,
                         "Error while registering libcamera camera provider service: %d", ret);
-#endif
 
     ABinderProcess_joinThreadPool();
     return EXIT_FAILURE;  // should not reach

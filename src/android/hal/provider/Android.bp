@@ -65,11 +65,3 @@ cc_binary {
     defaults: ["camera_service.libcamera_defaults"],
     init_rc: ["android.hardware.camera.provider-V1-libcamera-service.rc"],
 }
-
-cc_binary {
-    name: "android.hardware.camera.provider-V1-libcamera-service-lazy",
-    overrides: ["android.hardware.camera.provider-V1-libcamera-service"],
-    defaults: ["camera_service.libcamera_defaults"],
-    init_rc: ["android.hardware.camera.provider-V1-libcamera-service-lazy.rc"],
-    cflags: ["-DLAZY_SERVICE"],
-}
