@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#define LOG_TAG "CamDevSession@3.2-impl"
+#define LOG_TAG "LibcameraDeviceSession"
 #include <android/log.h>
 
 #include <set>

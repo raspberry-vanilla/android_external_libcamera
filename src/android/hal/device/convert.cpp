@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#define LOG_TAG "android.hardware.camera.device@3.4-convert-impl"
+#define LOG_TAG "LibcameraDevice"
 #include <log/log.h>
 
 #include "convert.h"
