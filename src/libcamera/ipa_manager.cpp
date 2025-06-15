@@ -112,7 +112,7 @@ IPAManager::IPAManager()
 
 	/* User-specified paths take precedence. */
 //	const char *modulePaths = utils::secure_getenv("LIBCAMERA_IPA_MODULE_PATH");
-	const char *modulePaths = "/vendor/lib64/libcamera/";
+	const char *modulePaths = "/vendor/lib64/libcamera/ipa/";
 	if (modulePaths) {
 		for (const auto &dir : utils::split(modulePaths, ":")) {
 			if (dir.empty())
