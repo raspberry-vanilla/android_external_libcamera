@@ -90,10 +90,10 @@ LOCAL_SHARED_LIBRARIES += libcamera libcamera-base
 # Modules 'camera.libcamera', produces '/vendor/lib{64}/hw/camera.libcamera.so' HAL
 $(eval $(call libcamera-lib,camera.libcamera,hw,LIBCAMERA_HAL_BIN))
 
-$(eval $(call libcamera-lib,ipa_rpi_vc4,libcamera,LIBCAMERA_IPA_RPI_VC4_BIN))
-$(eval $(call libcamera-etc,ipa_rpi_vc4.so.sign,libcamera,LIBCAMERA_IPA_RPI_VC4_SIGN))
-$(eval $(call libcamera-lib,ipa_rpi_pisp,libcamera,LIBCAMERA_IPA_RPI_PISP_BIN))
-$(eval $(call libcamera-etc,ipa_rpi_pisp.so.sign,libcamera,LIBCAMERA_IPA_RPI_PISP_SIGN))
+$(eval $(call libcamera-lib,ipa_rpi_vc4,libcamera/ipa,LIBCAMERA_IPA_RPI_VC4_BIN))
+$(eval $(call libcamera-etc,ipa_rpi_vc4.so.sign,libcamera/ipa,LIBCAMERA_IPA_RPI_VC4_SIGN))
+$(eval $(call libcamera-lib,ipa_rpi_pisp,libcamera/ipa,LIBCAMERA_IPA_RPI_PISP_BIN))
+$(eval $(call libcamera-etc,ipa_rpi_pisp.so.sign,libcamera/ipa,LIBCAMERA_IPA_RPI_PISP_SIGN))
 $(eval $(call libcamera-exec,raspberrypi_ipa_proxy,libcamera,LIBCAMERA_IPA_RPI_PROXY))
 
 #-------------------------------------------------------------------------------
