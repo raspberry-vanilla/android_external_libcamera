@@ -1,10 +1,9 @@
-# SPDX-License-Identifier: Apache-2.0
 #
 # Copyright (C) 2021, GlobalLogic Ukraine
 # Copyright (C) 2021, Roman Stratiienko (r.stratiienko@gmail.com)
 # Copyright (C) 2023, KonstaKANG
 #
-# meson_cross.mk - Android makefile
+# SPDX-License-Identifier: Apache-2.0
 #
 
 # Turn "dir1/dir2/dir3/dir4" into "../../../../"
@@ -17,6 +16,9 @@ endef
 MY_PATH := $(call my-dir)
 
 AOSP_ABSOLUTE_PATH := $(realpath .)
+define relative-to-absolute
+$(if $(patsubst /%,,$1),$(AOSP_ABSOLUTE_PATH)/$1,$1)
+endef
 
 libcamera_m_dummy_$(LOCAL_MULTILIB) := $(TARGET_OUT_INTERMEDIATES)/LIBCAMERA_DUMMY_$(LOCAL_MULTILIB)/dummy.c
 
@@ -43,7 +45,7 @@ link_deps := \
 	$(my_target_crtbegin_so_o) \
 	$(my_target_crtend_so_o)
 
-# Build using intermediate variables provided by AOSP make/core internals
+# Build libcamera using intermediate variables provided by AOSP make/core internals
 M_TARGET_PREFIX := $(my_2nd_arch_prefix)
 
 LIBCAMERA_LIB_DIR := lib$(subst 32,,$(LOCAL_MULTILIB))
@@ -73,7 +75,7 @@ LIBCAMERA_BINS := \
 
 MESON_GEN_NINJA := \
 	cd $(MESON_OUT_DIR) && PATH=/usr/bin:/usr/local/bin:$$PATH meson ./build \
-	--cross-file $(AOSP_ABSOLUTE_PATH)/$(MESON_GEN_DIR)/aosp_cross           \
+	--cross-file $(call relative-to-absolute,$(MESON_GEN_DIR))/aosp_cross    \
 	--buildtype=release                                                      \
 	-Dwerror=false                                                           \
 	-Dandroid=enabled                                                        \
@@ -90,6 +92,7 @@ define create-pkgconfig
 echo -e "Name: $2" \
 	"\nDescription: $2" \
 	"\nVersion: $3" > $1/$2.pc
+
 endef
 
 # Taken from build/make/core/binary.mk. We need this
@@ -158,7 +161,7 @@ endef
 
 define m-lld-flags-cleaned
   $(subst prebuilts/,$(AOSP_ABSOLUTE_PATH)/prebuilts/, \
-  $(subst out/,$(AOSP_ABSOLUTE_PATH)/out/,             \
+  $(subst $(OUT_DIR)/,$(call relative-to-absolute,$(OUT_DIR))/, \
   $(subst -Wl$(comma)--fatal-warnings,,                \
   $(subst -Wl$(comma)--no-undefined-version,,          \
   $(subst -Wl$(comma)--gc-sections,,                   \
@@ -189,35 +192,34 @@ define m-c-flags
 endef
 
 define filter-c-flags
-  $(filter-out -std=gnu++17 -fno-rtti -enable-trivial-auto-var-init-zero-knowing-it-will-be-removed-from-clang, \
+  $(filter-out -std=gnu++17 -std=gnu++14 -std=gnu99 -fno-rtti \
+    -enable-trivial-auto-var-init-zero-knowing-it-will-be-removed-from-clang \
+    -ftrivial-auto-var-init=zero,
     $(patsubst  -W%,, $1))
 endef
 
-define m-c-includes-common
-$(addprefix -I , $(PRIVATE_C_INCLUDES)) \
-$(if $(PRIVATE_NO_DEFAULT_COMPILER_FLAGS),,\
-    $(addprefix -I ,\
-        $(filter-out $(PRIVATE_C_INCLUDES), \
-            $(PRIVATE_GLOBAL_C_INCLUDES))) \
-    $(addprefix -isystem ,\
-        $(filter-out $(PRIVATE_C_INCLUDES), \
-            $(PRIVATE_GLOBAL_C_SYSTEM_INCLUDES))))
-endef
-
-define m-c-includes
-$(foreach i,$(PRIVATE_IMPORTED_INCLUDES),$(EXPORTS.$(i)))\
-$(m-c-includes-common)
-endef
-
-define postprocess-includes
-endef
-
-define m-c-abs-includes
-  $(subst $(space)-isystem,$(space)-isystem$(AOSP_ABSOLUTE_PATH)/, \
-  $(subst $(space)-I, -I$(AOSP_ABSOLUTE_PATH)/, \
-  $(subst $(space)-I$(space),$(space)-I, \
+define nospace-includes
   $(subst $(space)-isystem$(space),$(space)-isystem, \
-    $(strip $(m-c-includes))))))
+  $(subst $(space)-I$(space),$(space)-I, \
+  $(strip $(c-includes))))
+endef
+
+# Ensure include paths are always absolute
+# When OUT_DIR_COMMON_BASE env variable is set the AOSP/KATI will use absolute paths
+# for headers in intermediate output directories, but relative for all others.
+define abs-include
+$(strip \
+  $(if $(patsubst -I%,,$1),\
+    $(if $(patsubst -isystem/%,,$1),\
+      $(subst -isystem,-isystem$(AOSP_ABSOLUTE_PATH)/,$1),\
+      $1\
+    ),\
+    $(if $(patsubst -I/%,,$1),\
+      $(subst -I,-I$(AOSP_ABSOLUTE_PATH)/,$1),\
+      $1\
+    )\
+  )
+)
 endef
 
 $(MESON_GEN_FILES_TARGET): MESON_GEN_PKGCONFIGS:=$(MESON_GEN_PKGCONFIGS)
@@ -225,8 +227,10 @@ $(MESON_GEN_FILES_TARGET): MESON_GEN_DIR:=$(MESON_GEN_DIR)
 $(MESON_GEN_FILES_TARGET): $(sort $(shell find -L $(LIBCAMERA_TOP) -not -path '*/\.*'))
 	mkdir -p $(dir $@)
 	echo -e "[properties]\n"                                                                                                  \
-		"c_args = [$(foreach flag, $(call filter-c-flags,$(m-c-flags) $(m-c-abs-includes)),'$(flag)', )'']\n"             \
-		"cpp_args = [$(foreach flag, $(call filter-c-flags,$(m-cpp-flags) $(m-c-abs-includes)),'$(flag)', )'']\n"         \
+		"c_args = [$(foreach flag,$(call filter-c-flags,$(m-c-flags)),'$(flag)', ) \
+                           $(foreach inc,$(nospace-includes),'$(call abs-include,$(inc))', )'']\n" \
+		"cpp_args = [$(foreach flag,$(call filter-c-flags,$(m-cpp-flags)),'$(flag)', ) \
+                             $(foreach inc,$(nospace-includes),'$(call abs-include,$(inc))', )'']\n" \
 		"c_link_args = [$(foreach flag, $(m-lld-flags-cleaned),'$(flag)',)'']\n"                                          \
 		"cpp_link_args = [$(foreach flag, $(m-lld-flags-cleaned),'$(flag)',)'']\n"                                        \
 		"needs_exe_wrapper = true\n"                                                                                      \
@@ -236,7 +240,7 @@ $(MESON_GEN_FILES_TARGET): $(sort $(shell find -L $(LIBCAMERA_TOP) -not -path '*
 		"cpp = [$(foreach arg,$(PRIVATE_CXX),'$(subst prebuilts/,$(AOSP_ABSOLUTE_PATH)/prebuilts/,$(arg))',)'']\n"        \
 		"c_ld = 'lld'\n"                                                                                                  \
 		"cpp_ld = 'lld'\n\n"                                                                                              \
-		"pkgconfig = ['env', 'PKG_CONFIG_LIBDIR=' + '$(AOSP_ABSOLUTE_PATH)/$(MESON_GEN_DIR)', '/usr/bin/pkg-config']\n\n" \
+		"pkgconfig = ['env', 'PKG_CONFIG_LIBDIR=' + '$(call relative-to-absolute,$(MESON_GEN_DIR))', '/usr/bin/pkg-config']\n\n" \
 		"llvm-config = '/dev/null'\n"                                                                                     \
 		"[host_machine]\n"                                                                                                \
 		"system = 'linux'\n"                                                                                              \
@@ -244,6 +248,7 @@ $(MESON_GEN_FILES_TARGET): $(sort $(shell find -L $(LIBCAMERA_TOP) -not -path '*
 		"cpu = '$(MESON_CPU_FAMILY)'\n"                                                                                   \
 		"endian = 'little'" > $(dir $@)/aosp_cross
 
+	#
 	$(foreach pkg, $(MESON_GEN_PKGCONFIGS), $(call create-pkgconfig,$(dir $@),$(word 1, $(subst :, ,$(pkg))),$(word 2, $(subst :, ,$(pkg)))))
 	touch $@
 
@@ -264,7 +269,7 @@ $(MESON_OUT_DIR)/install/.install.timestamp: MESON_BUILD:=$(MESON_BUILD)
 $(MESON_OUT_DIR)/install/.install.timestamp: $(MESON_OUT_DIR)/.build.timestamp
 	rm -rf $(dir $@)
 	mkdir -p $(dir $@)
-	DESTDIR=$(AOSP_ABSOLUTE_PATH)/$(dir $@) $(MESON_BUILD) install
+	DESTDIR=$(call relative-to-absolute,$(dir $@)) $(MESON_BUILD) install
 	touch $@
 
 $(LIBCAMERA_BINS): $(MESON_OUT_DIR)/install/.install.timestamp

@@ -28,11 +28,11 @@ LOCAL_MULTILIB := 64
 else
 LOCAL_MULTILIB := 32
 endif
-include $(LOCAL_PATH)/meson_cross.mk
+include $(LOCAL_PATH)/libcamera_cross.mk
 
 ifdef TARGET_2ND_ARCH
 LOCAL_MULTILIB := 32
-include $(LOCAL_PATH)/meson_cross.mk
+include $(LOCAL_PATH)/libcamera_cross.mk
 endif
 
 #-------------------------------------------------------------------------------
