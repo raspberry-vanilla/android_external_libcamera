@@ -8,8 +8,6 @@ if not cc.has_header_symbol('uchar.h', 'mbrtoc16', required : get_option('androi
 endif
 
 android_deps = [
-    dependency('libexif', required : get_option('android')),
-    dependency('libjpeg', required : get_option('android')),
     libcamera_private,
     libyuv_dep,
 ]
@@ -20,6 +18,12 @@ foreach dep : android_deps
         subdir_done()
     endif
 endforeach
+
+libjpeg_dep = dependency('libjpeg', required : false)
+if libjpeg_dep.found()
+    config_h.set('HAVE_LIBJPEG', 1)
+    dependency('libexif', required : true)
+endif
 
 android_hal_sources = files([
     'camera3_hal.cpp',
@@ -38,7 +42,9 @@ android_hal_sources = files([
 android_cpp_args = []
 
 subdir('cros')
-subdir('jpeg')
+if libjpeg_dep.found()
+    subdir('jpeg')
+endif
 subdir('mm')
 
 android_camera_metadata_sources = files([
