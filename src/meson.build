@@ -46,7 +46,7 @@ if (pipelines.contains('virtual') or get_option('android').allowed()) and \
    not libyuv_dep.found()
     cmake = import('cmake')
 
-    libjpeg = dependency('libjpeg', required : true)
+    libjpeg = dependency('libjpeg', required : false)
 
     libyuv_vars = cmake.subproject_options()
     libyuv_vars.add_cmake_defines({'CMAKE_POSITION_INDEPENDENT_CODE': 'ON'})
@@ -55,7 +55,9 @@ if (pipelines.contains('virtual') or get_option('android').allowed()) and \
          '-Wno-sign-compare',
          '-Wno-unused-variable',
          '-Wno-unused-parameter')
-    libyuv_vars.append_link_args('-ljpeg')
+    if libjpeg.found()
+      libyuv_vars.append_link_args('-ljpeg')
+    endif
     libyuv = cmake.subproject('libyuv', options : libyuv_vars)
 
     # Meson fails to apply the -fPIC flag to static libraries produced by CMake
@@ -66,7 +68,7 @@ if (pipelines.contains('virtual') or get_option('android').allowed()) and \
     # Work around the issue by wrapping the libyuv static library into another
     # static library with 'pic' set to true.
     libyuv_static = static_library('libyuv-static',
-                                   dependencies : [libyuv.dependency('yuv'), libjpeg],
+                                   dependencies : libyuv.dependency('yuv'),
                                    pic : true,
                                    install : false)
     libyuv_include = libyuv.include_directories('yuv')
