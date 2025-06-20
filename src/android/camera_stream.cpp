@@ -15,7 +15,9 @@
 
 #include <libcamera/formats.h>
 
+#ifdef HAVE_LIBJPEG
 #include "jpeg/post_processor_jpeg.h"
+#endif
 #include "yuv/post_processor_yuv.h"
 
 #include "camera_buffer.h"
@@ -97,9 +99,11 @@ int CameraStream::configure()
 			postProcessor_ = std::make_unique<PostProcessorYuv>();
 			break;
 
+#ifdef HAVE_LIBJPEG
 		case formats::MJPEG:
 			postProcessor_ = std::make_unique<PostProcessorJpeg>(cameraDevice_);
 			break;
+#endif
 
 		default:
 			LOG(HAL, Error) << "Unsupported format: " << outFormat;
