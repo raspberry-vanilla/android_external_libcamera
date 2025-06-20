@@ -53,7 +53,10 @@ if (pipelines.contains('virtual') or get_option('android').allowed()) and \
          '-Wno-sign-compare',
          '-Wno-unused-variable',
          '-Wno-unused-parameter')
-    libyuv_vars.append_link_args('-ljpeg')
+    libjpeg = dependency('libjpeg', required : false)
+    if libjpeg.found()
+      libyuv_vars.append_link_args('-ljpeg')
+    endif
     libyuv = cmake.subproject('libyuv', options : libyuv_vars)
     libyuv_dep = libyuv.dependency('yuv')
 endif
