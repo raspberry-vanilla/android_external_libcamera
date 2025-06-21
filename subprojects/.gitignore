@@ -6,3 +6,4 @@
 /nlohmann_json*
 /packagecache
 /yaml-0.2.5
+nlohmann_json.wrap
