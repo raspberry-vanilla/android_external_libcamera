@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: CC0-1.0
 
 [wrap-git]
-url = https://github.com/raspberrypi/libpisp.git
-revision = v1.3.0
+url = https://github.com/raspberry-vanilla/android_external_libpisp.git
+revision = 8fcebbcff58e1a0f38efc02f4b49c3b20a0a7ca3
 depth = 1
