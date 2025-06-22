@@ -1,0 +1,47 @@
+//
+// Copyright (C) 2025 KonstaKANG
+//
+// SPDX-License-Identifier: LGPL-2.1-or-later
+//
+
+prebuilt_etc {
+    name: "libcamera-rpi-ipa_rpi_pisp_data",
+    relative_install_path: "libcamera/ipa/rpi/pisp",
+    vendor: true,
+    srcs: [
+        "imx219.json",
+        "imx219_noir.json",
+        "imx296.json",
+        "imx296_mono.json",
+        "imx477.json",
+        "imx477_noir.json",
+        "imx477_scientific.json",
+        "imx500.json",
+        "imx519.json",
+        "imx708.json",
+        "imx708_noir.json",
+        "imx708_wide.json",
+        "imx708_wide_noir.json",
+        "ov5647.json",
+        "ov5647_noir.json",
+        "ov64a40.json",
+    ],
+    dsts: [
+        "imx219.json",
+        "imx219_noir.json",
+        "imx296.json",
+        "imx296_mono.json",
+        "imx477.json",
+        "imx477_noir.json",
+        "imx477_scientific.json",
+        "imx500.json",
+        "imx519.json",
+        "imx708.json",
+        "imx708_noir.json",
+        "imx708_wide.json",
+        "imx708_wide_noir.json",
+        "ov5647.json",
+        "ov5647_noir.json",
+        "ov64a40.json",
+    ],
+}
