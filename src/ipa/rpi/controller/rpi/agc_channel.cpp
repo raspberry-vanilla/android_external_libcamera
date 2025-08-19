@@ -908,7 +908,7 @@ void AgcChannel::divideUpExposure()
 			}
 			if (status_.fixedGain == 0.0) {
 				if (exposureMode_->gain[stage] * exposureTime >= exposureValue) {
-					gain = exposureValue / exposureTime;
+					gain = exposureValue.count() / exposureTime.count();
 					break;
 				}
 				gain = exposureMode_->gain[stage];
@@ -926,7 +926,7 @@ void AgcChannel::divideUpExposure()
 		int flickerPeriods = exposureTime / status_.flickerPeriod;
 		if (flickerPeriods) {
 			Duration newExposureTime = flickerPeriods * status_.flickerPeriod;
-			gain *= exposureTime / newExposureTime;
+			gain *= exposureTime.count() / newExposureTime.count();
 			exposureTime = newExposureTime;
 		}
 		LOG(RPiAgc, Debug) << "After flicker avoidance, exposure time "
