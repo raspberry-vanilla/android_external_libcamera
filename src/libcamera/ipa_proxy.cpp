@@ -125,7 +125,7 @@ std::string IPAProxy::configurationFile(const std::string &name,
 	 * Check the directory pointed to by the IPA config path environment
 	 * variable next.
 	 */
-	const char *confPaths = utils::secure_getenv("LIBCAMERA_IPA_CONFIG_PATH");
+	const char *confPaths = "/vendor/etc/libcamera/ipa/";
 	if (confPaths) {
 		for (const auto &dir : utils::split(confPaths, ":")) {
 			if (dir.empty())
@@ -200,7 +200,7 @@ std::string IPAProxy::resolvePath(const std::string &file) const
 	std::string proxyFile = "/" + file;
 
 	/* Check env variable first. */
-	const char *execPaths = utils::secure_getenv("LIBCAMERA_IPA_PROXY_PATH");
+	const char *execPaths = "vendor/bin/libcamera_proxy/";
 	if (execPaths) {
 		for (const auto &dir : utils::split(execPaths, ":")) {
 			if (dir.empty())
