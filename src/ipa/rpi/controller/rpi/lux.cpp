@@ -97,7 +97,7 @@ void Lux::process(StatisticsPtr &stats, Metadata *imageMetadata)
 		double currentAperture = deviceStatus.aperture.value_or(currentAperture_);
 		double gainRatio = referenceGain_ / currentGain;
 		double exposureTimeRatio =
-			referenceExposureTime_ / deviceStatus.exposureTime;
+			referenceExposureTime_.count() / deviceStatus.exposureTime.count();
 		double apertureRatio = referenceAperture_ / currentAperture;
 		double yRatio = currentY / referenceY_;
 		double estimatedLux = exposureTimeRatio * gainRatio *
