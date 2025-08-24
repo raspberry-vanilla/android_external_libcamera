@@ -807,16 +807,24 @@ int CameraDevice::processControls(Camera3RequestDescriptor *descriptor)
 	ControlList &controls = descriptor->request_->controls();
 	camera_metadata_ro_entry_t entry;
 	if (settings.getEntry(ANDROID_SCALER_CROP_REGION, &entry)) {
-		const int32_t *data = entry.data.i32;
-		Rectangle cropRegion{ data[0], data[1],
-				      static_cast<unsigned int>(data[2]),
-				      static_cast<unsigned int>(data[3]) };
-		controls.set(controls::ScalerCrop, cropRegion);
+		/* Only set the control if the camera supports it */
+		auto iter = camera_->controls().find(controls::ScalerCrop.id());
+		if (iter != camera_->controls().end()) {
+			const int32_t *data = entry.data.i32;
+			Rectangle cropRegion{ data[0], data[1],
+					      static_cast<unsigned int>(data[2]),
+					      static_cast<unsigned int>(data[3]) };
+			controls.set(controls::ScalerCrop, cropRegion);
+		}
 	}
 
 	if (settings.getEntry(ANDROID_STATISTICS_FACE_DETECT_MODE, &entry)) {
-		const uint8_t *data = entry.data.u8;
-		controls.set(controls::draft::FaceDetectMode, data[0]);
+		/* Only set the control if the camera supports it */
+		auto iter = camera_->controls().find(controls::draft::FaceDetectMode.id());
+		if (iter != camera_->controls().end()) {
+			const uint8_t *data = entry.data.u8;
+			controls.set(controls::draft::FaceDetectMode, data[0]);
+		}
 	}
 
 	if (settings.getEntry(ANDROID_SENSOR_TEST_PATTERN_MODE, &entry)) {
