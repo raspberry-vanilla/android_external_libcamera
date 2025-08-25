@@ -1638,9 +1638,75 @@ void LibcameraDeviceSession::sNotify(
 ScopedAStatus LibcameraDeviceSession::isReconfigurationRequired(
         const CameraMetadata& in_oldSessionParams, const CameraMetadata& in_newSessionParams,
         bool* _aidl_return) {
-    ALOGI("%s()", __func__);
+    ALOGV("%s: Comparing session parameters", __FUNCTION__);
+
+    Status status = initStatus();
+    if (status != Status::OK) {
+        ALOGE("%s: camera init failed or disconnected", __FUNCTION__);
+        return fromStatus(status);
+    }
+
+    // Convert AIDL metadata to camera_metadata_t for comparison
+    const camera_metadata_t* oldParams = nullptr;
+    const camera_metadata_t* newParams = nullptr;
+
+    if (!convertFromAidl(in_oldSessionParams, &oldParams)) {
+        ALOGE("%s: Failed to convert old session parameters", __FUNCTION__);
+        return fromStatus(Status::INTERNAL_ERROR);
+    }
+
+    if (!convertFromAidl(in_newSessionParams, &newParams)) {
+        ALOGE("%s: Failed to convert new session parameters", __FUNCTION__);
+        return fromStatus(Status::INTERNAL_ERROR);
+    }
+
+    // Default to false - no reconfiguration needed
     *_aidl_return = false;
-    return fromStatus(Status::INTERNAL_ERROR);
+
+    // List of session parameters that would require stream reconfiguration
+    // if changed. For libcamera HAL, we are conservative and assume most
+    // parameters that could affect stream configuration would need reconfiguration.
+    static const uint32_t reconfigParams[] = {
+        // Frame rate changes might affect stream configuration
+        ANDROID_CONTROL_AE_TARGET_FPS_RANGE,
+        // Flash mode changes could require reconfiguration for torch mode
+        ANDROID_FLASH_MODE,
+        // Video stabilization might require different stream sizes
+        ANDROID_CONTROL_VIDEO_STABILIZATION_MODE,
+    };
+
+    // Compare each parameter that could require reconfiguration
+    for (const uint32_t tag : reconfigParams) {
+        camera_metadata_ro_entry_t oldEntry, newEntry;
+
+        int oldResult = find_camera_metadata_ro_entry(oldParams, tag, &oldEntry);
+        int newResult = find_camera_metadata_ro_entry(newParams, tag, &newEntry);
+
+        // If parameter presence changed
+        if ((oldResult == 0) != (newResult == 0)) {
+            ALOGD("%s: Parameter 0x%x presence changed, reconfiguration required",
+                  __FUNCTION__, tag);
+            *_aidl_return = true;
+            break;
+        }
+
+        // If both present, compare values
+        if (oldResult == 0 && newResult == 0) {
+            if (oldEntry.count != newEntry.count ||
+                memcmp(oldEntry.data.u8, newEntry.data.u8,
+                       oldEntry.count * camera_metadata_type_size[oldEntry.type]) != 0) {
+                ALOGD("%s: Parameter 0x%x value changed, reconfiguration required",
+                      __FUNCTION__, tag);
+                *_aidl_return = true;
+                break;
+            }
+        }
+    }
+
+    ALOGV("%s: Reconfiguration %s", __FUNCTION__,
+          *_aidl_return ? "required" : "not required");
+
+    return fromStatus(Status::OK);
 }
 ScopedAStatus LibcameraDeviceSession::signalStreamFlush(const std::vector<int32_t>& in_streamIds,
                                                         int32_t in_streamConfigCounter) {
