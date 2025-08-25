@@ -1657,8 +1657,32 @@ ScopedAStatus LibcameraDeviceSession::switchToOffline(
 }
 ScopedAStatus LibcameraDeviceSession::repeatingRequestEnd(
         int32_t in_frameNumber, const std::vector<int32_t>& in_streamIds) {
-    ALOGI("%s()", __func__);
-    return fromStatus(Status::INTERNAL_ERROR);
+    ALOGV("%s: frameNumber %d, streamIds size %zu", __FUNCTION__, in_frameNumber, in_streamIds.size());
+
+    Status status = initStatus();
+    if (status != Status::OK) {
+        ALOGE("%s: camera init failed or disconnected", __FUNCTION__);
+        return fromStatus(Status::OK);
+    }
+
+    // Validate stream IDs
+    for (int32_t streamId : in_streamIds) {
+        if (mStreamMap.find(streamId) == mStreamMap.end()) {
+            ALOGE("%s: Invalid stream ID %d", __FUNCTION__, streamId);
+            return fromStatus(Status::OK);
+        }
+    }
+
+    // Log the notification for debugging purposes
+    ALOGD("%s: Repeating request ending at frame %d for %zu streams",
+          __FUNCTION__, in_frameNumber, in_streamIds.size());
+
+    // This is a notification callback - no action required by HAL
+    // The framework is informing us that the repeating request will end
+    // at the specified frame number for the given streams.
+    // Since this is lightweight notification, we simply acknowledge it.
+
+    return fromStatus(Status::OK);
 }
 
 } // namespace implementation
