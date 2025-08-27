@@ -1092,6 +1092,8 @@ ScopedAStatus LibcameraDeviceSession::configureStreams(
             convertToAidl(static_cast<Camera3Stream*>(streams[i]), &out[i]);
         }
         mFirstRequest = true;
+        // Increment stream configuration counter for signalStreamFlush race condition handling
+        mStreamConfigCounter++;
     }
     return fromStatus(status);
 }
@@ -1710,8 +1712,70 @@ ScopedAStatus LibcameraDeviceSession::isReconfigurationRequired(
 }
 ScopedAStatus LibcameraDeviceSession::signalStreamFlush(const std::vector<int32_t>& in_streamIds,
                                                         int32_t in_streamConfigCounter) {
-    ALOGI("%s()", __func__);
-    return fromStatus(Status::INTERNAL_ERROR);
+    ALOGV("%s: streamIds size %zu, configCounter %d", __FUNCTION__,
+          in_streamIds.size(), in_streamConfigCounter);
+
+    Status status = initStatus();
+    if (status != Status::OK) {
+        ALOGE("%s: camera init failed or disconnected", __FUNCTION__);
+        return fromStatus(status);
+    }
+
+    // Check for race condition - if the counter is less than our last configureStreams,
+    // this call is stale and should be ignored
+    int32_t currentCounter = mStreamConfigCounter.load();
+    if (in_streamConfigCounter < currentCounter) {
+        ALOGD("%s: Stale signalStreamFlush call (counter %d < current %d), ignoring",
+              __FUNCTION__, in_streamConfigCounter, currentCounter);
+        return fromStatus(Status::OK);
+    }
+
+    // Validate stream IDs
+    for (int32_t streamId : in_streamIds) {
+        if (mStreamMap.find(streamId) == mStreamMap.end()) {
+            ALOGE("%s: Invalid stream ID %d", __FUNCTION__, streamId);
+            return fromStatus(Status::ILLEGAL_ARGUMENT);
+        }
+    }
+
+    ALOGD("%s: Flushing buffers for %zu streams before reconfiguration",
+          __FUNCTION__, in_streamIds.size());
+
+    // Check current inflight buffers for the specified streams
+    {
+        Mutex::Autolock _l(mInflightLock);
+
+        size_t totalInflightBuffers = 0;
+        for (int32_t streamId : in_streamIds) {
+            size_t streamInflightCount = 0;
+            for (const auto& pair : mInflightBuffers) {
+                if (pair.first.first == streamId) {
+                    streamInflightCount++;
+                }
+            }
+
+            if (streamInflightCount > 0) {
+                ALOGD("%s: Stream %d has %zu inflight buffers",
+                      __FUNCTION__, streamId, streamInflightCount);
+                totalInflightBuffers += streamInflightCount;
+            }
+        }
+
+        if (totalInflightBuffers > 0) {
+            ALOGW("%s: Total %zu inflight buffers detected for streams being flushed. "
+                  "HAL should return these buffers promptly to avoid fatal errors.",
+                  __FUNCTION__, totalInflightBuffers);
+        } else {
+            ALOGV("%s: No inflight buffers found for specified streams", __FUNCTION__);
+        }
+    }
+
+    // This is mainly a hint/notification from camera service
+    // The actual buffer return will happen through normal capture request completion
+    // or error callbacks. We just log the request and let the system know we received it.
+
+    ALOGV("%s: Stream flush signal processed successfully", __FUNCTION__);
+    return fromStatus(Status::OK);
 }
 ScopedAStatus LibcameraDeviceSession::switchToOffline(
         const std::vector<int32_t>& in_streamsToKeep,

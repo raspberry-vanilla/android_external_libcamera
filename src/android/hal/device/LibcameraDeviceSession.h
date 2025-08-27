@@ -25,6 +25,7 @@
 
 #include "convert.h"
 
+#include <atomic>
 #include <deque>
 #include <map>
 #include <unordered_map>
@@ -157,6 +158,9 @@ protected:
     uint32_t mNumPartialResults;
     // Stream ID -> Camera3Stream cache
     std::map<int, Camera3Stream> mStreamMap;
+
+    // Stream configuration counter to handle race conditions in signalStreamFlush
+    std::atomic<int32_t> mStreamConfigCounter{0};
 
     mutable Mutex mInflightLock; // protecting mInflightBuffers and mCirculatingBuffers
     // (streamID, frameNumber) -> inflight buffer cache
