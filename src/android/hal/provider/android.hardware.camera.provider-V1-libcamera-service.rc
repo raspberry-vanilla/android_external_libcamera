@@ -1,4 +1,8 @@
-service vendor.camera.provider-libcamera /vendor/bin/hw/android.hardware.camera.provider-V1-libcamera-service
+on property:apex.all.ready=true
+    setprop ro.hardware.camera libcamera
+    start vendor.camera.provider-libcamera
+
+service vendor.camera.provider-libcamera /apex/com.android.hardware.camera.libcamera/bin/hw/android.hardware.camera.provider-V1-libcamera-service
     interface aidl android.hardware.camera.provider.ICameraProvider/libcamera/0
     class hal
     user cameraserver
@@ -6,5 +10,8 @@ service vendor.camera.provider-libcamera /vendor/bin/hw/android.hardware.camera.
     ioprio rt 4
     capabilities SYS_NICE
     task_profiles CameraServiceCapacity MaxPerformance
+    setenv LIBCAMERA_IPA_CONFIG_PATH /apex/com.android.hardware.camera.libcamera/etc/libcamera/ipa/
+    setenv LIBCAMERA_IPA_MODULE_PATH /apex/com.android.hardware.camera.libcamera/lib64/libcamera/ipa/
     setenv LIBCAMERA_LOG_LEVELS *:WARN
     setenv LIBCAMERA_LOG_FILE syslog
+    disabled

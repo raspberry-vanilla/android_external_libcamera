@@ -38,6 +38,7 @@ cc_library_shared {
     srcs: ["LibcameraProvider.cpp"],
     export_include_dirs: ["."],
     defaults: ["libcamera_aidl_defaults"],
+    installable: false,
 }
 
 cc_defaults {
@@ -50,6 +51,49 @@ cc_defaults {
 
 cc_binary {
     name: "android.hardware.camera.provider-V1-libcamera-service",
-    init_rc: ["android.hardware.camera.provider-V1-libcamera-service.rc"],
     defaults: ["camera_service.libcamera_defaults"],
+    installable: false,
+}
+
+prebuilt_etc {
+    name: "android.hardware.camera.provider-V1-libcamera-service.rc",
+    src: "android.hardware.camera.provider-V1-libcamera-service.rc",
+    installable: false,
+}
+
+prebuilt_etc {
+    name: "android.hardware.camera.provider-V1-libcamera-service.xml",
+    src: "android.hardware.camera.provider-V1-libcamera-service.xml",
+    sub_dir: "vintf",
+    installable: false,
+}
+
+apex {
+    name: "com.android.hardware.camera.libcamera",
+    manifest: "apex_manifest.json",
+    file_contexts: "apex_file_contexts",
+    key: "com.android.hardware.key",
+    certificate: ":com.android.hardware.certificate",
+    updatable: false,
+    vendor: true,
+
+    binaries: [
+        "android.hardware.camera.provider-V1-libcamera-service",
+    ],
+    native_shared_libs: [
+        "camera.libcamera",
+    ] + select(soong_config_variable("libcamera", "ipa"), {
+        "pisp": ["ipa_rpi_pisp"],
+        "vc4": ["ipa_rpi_vc4"],
+        default: [],
+    }),
+    prebuilts: [
+        "android.hardware.camera.provider-V1-libcamera-service.rc",
+        "android.hardware.camera.provider-V1-libcamera-service.xml",
+        "backend_default_config.json",
+    ] + select(soong_config_variable("libcamera", "ipa"), {
+        "pisp": ["libcamera-rpi-ipa_rpi_pisp_data"],
+        "vc4": ["libcamera-rpi-ipa_rpi_vc4_data"],
+        default: [],
+    }),
 }
