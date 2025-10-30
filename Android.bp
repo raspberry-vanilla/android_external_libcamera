@@ -164,7 +164,6 @@ cc_library_shared {
     ],
     soc_specific: true,
     relative_install_path: "libcamera/ipa",
-    required: ["libcamera-rpi-ipa_rpi_vc4_data"],
     defaults: ["libcamera-rpi-defaults"],
 }
 
@@ -296,7 +295,6 @@ cc_library_shared {
     soc_specific: true,
     relative_install_path: "libcamera/ipa",
     header_libs: ["libpisp_headers"],
-    required: ["libcamera-rpi-ipa_rpi_pisp_data"],
     defaults: ["libcamera-rpi-defaults"],
 }
 

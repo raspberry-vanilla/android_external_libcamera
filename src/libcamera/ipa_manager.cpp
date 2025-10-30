@@ -111,7 +111,7 @@ IPAManager::IPAManager()
 	unsigned int ipaCount = 0;
 
 	/* User-specified paths take precedence. */
-	const char *modulePaths = "/vendor/lib64/libcamera/ipa/";
+	const char *modulePaths = "/apex/com.android.hardware.camera.libcamera/lib64/libcamera/ipa/";
 	if (modulePaths) {
 		for (const auto &dir : utils::split(modulePaths, ":")) {
 			if (dir.empty())

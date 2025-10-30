@@ -1,4 +1,4 @@
-service vendor.camera.provider-libcamera /vendor/bin/hw/android.hardware.camera.provider-V1-libcamera-service
+service vendor.camera.provider-libcamera /apex/com.android.hardware.camera.libcamera/bin/hw/android.hardware.camera.provider-V1-libcamera-service
     interface aidl android.hardware.camera.provider.ICameraProvider/libcamera/0
     class hal
     user cameraserver

@@ -7,7 +7,6 @@
 prebuilt_etc {
     name: "libcamera-rpi-ipa_rpi_vc4_data",
     relative_install_path: "libcamera/ipa/rpi/vc4",
-    vendor: true,
     srcs: [
         "imx219.json",
         "imx219_noir.json",
@@ -44,4 +43,5 @@ prebuilt_etc {
         "ov5647_noir.json",
         "ov64a40.json",
     ],
+    installable: false,
 }
