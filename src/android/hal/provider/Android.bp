@@ -45,10 +45,7 @@ cc_defaults {
     name: "camera_service.libcamera_defaults",
     relative_install_path: "hw",
     srcs: ["service.cpp"],
-    shared_libs: [
-        "android.hardware.camera.provider-V1-libcamera-impl",
-        "camera.libcamera",
-    ],
+    shared_libs: ["android.hardware.camera.provider-V1-libcamera-impl"],
     defaults: ["libcamera_aidl_defaults"],
 }
 
@@ -83,7 +80,9 @@ apex {
     binaries: [
         "android.hardware.camera.provider-V1-libcamera-service",
     ],
-    native_shared_libs: select(soong_config_variable("libcamera", "ipa"), {
+    native_shared_libs: [
+        "camera.libcamera",
+    ] + select(soong_config_variable("libcamera", "ipa"), {
         "pisp": ["ipa_rpi_pisp"],
         "vc4": ["ipa_rpi_vc4"],
         default: [],
