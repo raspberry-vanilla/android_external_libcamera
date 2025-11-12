@@ -94,8 +94,8 @@ cc_library_shared {
     shared_libs: [
         "libcamera-base",
         "libpisp",
-        "libyaml",
     ],
+    static_libs: ["libyaml"],
     local_include_dirs: [
         "include",
         "meson_generated/include",
