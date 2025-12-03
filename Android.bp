@@ -377,7 +377,7 @@ cc_defaults {
         "-DLIBCAMERA_DATA_DIR=\"/usr/local/share/libcamera\"",
         "-DLIBCAMERA_SYSCONF_DIR=\"/vendor/etc/libcamera\"",
         "-D_FILE_OFFSET_BITS=64",
-        "-D_FORTIFY_SOURCE=2",
+        "-D_FORTIFY_SOURCE=3",
         "-O3",
         "-Wall",
         "-Wextra",
