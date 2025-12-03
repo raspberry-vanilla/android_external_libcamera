@@ -11,6 +11,6 @@
 
 namespace libcamera {
 
-const std::string CameraManager::version_("v0.6.0+5931-d20e64f6");
+const std::string CameraManager::version_("v0.6.0+5933-85f48f41");
 
 } /* namespace libcamera */
