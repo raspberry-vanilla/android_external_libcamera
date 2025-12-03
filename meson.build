@@ -143,7 +143,7 @@ if cc.get_id() == 'clang'
         if fortify == ''
             message('Adding _FORTIFY_SOURCE')
             common_arguments += [
-                '-D_FORTIFY_SOURCE=2',
+                '-D_FORTIFY_SOURCE=3',
             ]
         endif
     endif
