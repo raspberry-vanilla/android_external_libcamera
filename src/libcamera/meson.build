@@ -71,6 +71,10 @@ libatomic = cc.find_library('atomic', required : false)
 libthreads = dependency('threads')
 
 mesa_works = cc.check_header('EGL/egl.h', required: false)
+if host_machine.system() == 'android'
+    mesa_works = false
+endif
+
 libegl = dependency('egl', required : false)
 libglesv2 = dependency('glesv2', required : false)
 
